@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 from lancedb.pydantic import LanceModel, Vector
 import cv2
 import lancedb
@@ -6,8 +7,10 @@ import uuid
 from sentence_transformers import SentenceTransformer
 from PIL import Image
 import numpy as np
+import multiprocessing
 import datetime
 import os
+import uvicorn
 
 class VideoModel(LanceModel):
     id: str
@@ -23,12 +26,27 @@ class FrameModel(LanceModel):
 
 DB_PATH = "./.db"  # This folder will be created on your disk
 MODEL_NAME = 'clip-ViT-B-32'
+MODEL_PATH = './.models/clip-ViT-B-32'  # Local path to save the model
 
-model = SentenceTransformer(MODEL_NAME)
+model = SentenceTransformer(MODEL_PATH)
+
+if not os.path.exists(MODEL_PATH):
+    print(f"Downloading model '{MODEL_NAME}' from Hugging Face...")
+    model = SentenceTransformer(MODEL_NAME)
+    os.makedirs(DB_PATH, exist_ok=True)
+    model.save(MODEL_PATH)  # Save the model locally for future use
 
 db = lancedb.connect(DB_PATH)
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],      # Allows all origins
+    allow_credentials=True,   # Optional: allow cookies/auth headers
+    allow_methods=["*"],      # Allows all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],      # Allows all headers
+)
 
 def index_video_to_db(video: VideoModel):
     if not os.path.exists(video.path): 
@@ -79,7 +97,7 @@ def index_video_to_db(video: VideoModel):
     if batch:
         frames_table.add(batch)
         
-    videos_table.update(where=f"id = '{video.id}'", values={"status": "done"})
+    videos_table.update(where=f"id = '{video.id}'", values={"status": "completed"})
     cap.release()
 
 @app.get("/search")
@@ -98,6 +116,12 @@ def search(query: str|None = None, tags: list[str] = []):
         frame['video'] = next((v for v in videos if v["id"] == frame['video_id']), None)
 
     return {"results": frames}
+
+@app.get("/videos")
+def list_videos():
+    videos_table = db.open_table("videos")
+    videos = videos_table.search().to_pydantic(VideoModel)
+    return {"results": videos}
 
 @app.post("/index")
 def index(path: str, name: str, tags: list[str] = []):
@@ -180,3 +204,7 @@ def install():
     db.create_table("videos", schema=VideoModel)
     db.create_table("frames", schema=FrameModel)
     return {"status": "LanceDB tables created!"}
+
+if __name__ == '__main__':
+    multiprocessing.freeze_support()
+    uvicorn.run("main:app", host="0.0.0.0", port=58000, reload=False, workers=2)
