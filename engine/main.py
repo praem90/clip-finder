@@ -123,10 +123,15 @@ def list_videos():
     videos = videos_table.search().to_pydantic(VideoModel)
     return {"results": videos}
 
+
+class IndexVideoRequest(LanceModel):
+    path: str
+
 @app.post("/index")
-def index(path: str, name: str, tags: list[str] = []):
+def index(request: IndexVideoRequest):
     videos_table = db.open_table("videos")
-    video = VideoModel(id=uuid.uuid4().hex, path=path, name=name, tags=tags)
+    name = os.path.basename(request.path)
+    video = VideoModel(id=uuid.uuid4().hex, path=request.path, name=name, tags=[])
     videos_table.add([video])
     index_video_to_db(video)
     return {"video_id": video.id}
