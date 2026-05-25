@@ -18,6 +18,7 @@ class VideoModel(LanceModel):
     name: str
     status: str = "pending"  # pending, processing, done
     tags: list[str] = []
+    lastIndexedAt: datetime.datetime = datetime.datetime.now()
 
 class FrameModel(LanceModel):
     video_id: str
@@ -97,7 +98,7 @@ def index_video_to_db(video: VideoModel):
     if batch:
         frames_table.add(batch)
         
-    videos_table.update(where=f"id = '{video.id}'", values={"status": "completed"})
+    videos_table.update(where=f"id = '{video.id}'", values={"status": "completed", "lastIndexedAt": datetime.datetime.now()})
     cap.release()
 
 @app.get("/search")
@@ -123,6 +124,15 @@ def list_videos():
     videos = videos_table.search().to_pydantic(VideoModel)
     return {"results": videos}
 
+@app.delete("/videos/{video_id}", status_code=204)
+def delete_video(video_id: str):
+    videos_table = db.open_table("videos")
+    frames_table = db.open_table("frames")
+    videos_table.delete(f"id = '{video_id}'")
+    frames_table.delete(f"video_id = '{video_id}'")
+
+    return Response(status_code=204)
+
 
 class IndexVideoRequest(LanceModel):
     path: str
@@ -134,6 +144,21 @@ def index(request: IndexVideoRequest):
     video = VideoModel(id=uuid.uuid4().hex, path=request.path, name=name, tags=[])
     videos_table.add([video])
     index_video_to_db(video)
+    return {"video_id": video.id}
+
+@app.post("/index/{video_id}")
+def index(video_id: str):
+    videos_table = db.open_table("videos")
+    video = videos_table.search().where(f"id = '{video_id}'").limit(1).to_pydantic(VideoModel)
+    video = video[0] if video else None
+    if not video:
+        return Response(content="Unalbe to reIndex the video", media_type="text/plain", status_code=404)
+
+    try:
+        index_video_to_db(video)
+    except Exception as e:
+        return Response(content=f"Error indexing video: {str(e)}", media_type="text/plain", status_code=500)
+
     return {"video_id": video.id}
 
 @app.get("/frame")

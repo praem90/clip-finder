@@ -5,15 +5,17 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { useQuery } from '@tanstack/react-query';
-import { VideoItem } from "@/components/video";
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Video } from "@/types/video";
 import { getVideos } from "@/services/api";
-import { useEffect } from "react";
-import { indexVideo } from "../services/api";
+import { useEffect, useState } from "react";
+import { deleteVideo, indexVideo, reIndexVideo } from "../services/api";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "#components/ui/table";
 import IndexStatus from "#components/index-status";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { RefreshCw, Trash2 } from "lucide-react";
+import { Spinner } from "#components/ui/spinner";
 
 
 export function Media() {
@@ -22,15 +24,18 @@ export function Media() {
 		queryFn: getVideos,
 	});
 
+	const queryClient = useQueryClient()
+
 	useEffect(() => {
 		const handleFileDrop = async (e) => {
-			console.log('File dropped:', e);
 			try {
 				await indexVideo({ videoPath: e.detail });
 				toast.success('Video indexed successfully!');
 			} catch (err) {
-				console.error('Error indexing video:', err);
 				toast.error(`Failed to index video: ${err.message}`);
+			} finally {
+				// Invalidate the videos query to refresh the list after indexing
+				queryClient.invalidateQueries(['videos']);
 			}
 		};
 		window.addEventListener('tauri-file-dropped', handleFileDrop);
@@ -58,18 +63,14 @@ export function Media() {
 						<TableRow>
 							<TableCell>Video Name</TableCell>
 							<TableCell>Location</TableCell>
-							<TableCell>Duration</TableCell>
+							<TableCell>Last Indexed At</TableCell>
 							<TableCell>Status</TableCell>
+							<TableCell>Action</TableCell>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
 						{data?.results.map((video: Video) => (
-							<TableRow key={video.id}>
-								<TableCell>{video.path.split('/').slice(-1)[0]}</TableCell>
-								<TableCell>{video.path.split('/').slice(0, -1).join('/')}</TableCell>
-								<TableCell>-</TableCell>
-								<TableCell><IndexStatus status={video.status} /></TableCell>
-							</TableRow>
+							<MediaRow key={video.id} video={video} />
 						))}
 					</TableBody>
 				</Table>
@@ -77,5 +78,55 @@ export function Media() {
 		</Card>
 	)
 }
+
+export function MediaRow({ video }: { video: Video }) {
+	const [deleting, setDeleting] = useState(false);
+	const [reIndexing, setReIndexing] = useState(false);
+	const queryClient = useQueryClient()
+
+	const reIndex = () => {
+		setReIndexing(true);
+
+		reIndexVideo(video.id).then(() => {
+			toast.success('Video re-indexed successfully!');
+		}).catch((err) => {
+			toast.error(`Failed to re-index video: ${err.message}`);
+		}).finally(() => {
+			setReIndexing(false);
+			queryClient.invalidateQueries(['videos']);
+		});
+	};
+
+	const handleDelete = () => {
+		setDeleting(true);
+
+		deleteVideo(video.id).then(() => {
+			toast.success('Video deleted successfully!');
+		}).catch((err) => {
+			toast.error(`Failed to delete video: ${err.message}`);
+		}).finally(() => {
+			setDeleting(false);
+			queryClient.invalidateQueries(['videos']);
+		});
+	}
+
+	return (
+		<TableRow key={video.id}>
+			<TableCell>{video.path.split('/').slice(-1)[0]}</TableCell>
+			<TableCell>{video.path.split('/').slice(0, -1).join('/')}</TableCell>
+			<TableCell>{new Date(video.lastIndexedAt).toLocaleDateString()} {new Date(video.lastIndexedAt).toLocaleTimeString()}</TableCell>
+			<TableCell><IndexStatus status={video.status} /></TableCell>
+			<TableCell className="space-x-2">
+				<Button variant="outline" size="icon" onClick={reIndex}>
+					{reIndexing ? <Spinner /> : <RefreshCw />}
+				</Button>
+				<Button variant="destructive" size="icon" onClick={handleDelete} disabled={deleting}>
+					{deleting ? <Spinner /> : <Trash2 />}
+				</Button>
+			</TableCell>
+		</TableRow>
+
+	);
+};
 
 export default Media;

@@ -3,6 +3,7 @@ export interface Video {
 	name: string;
 	path: string;
 	status: Status;
+	lastIndexedAt: string;
 }
 
 export enum Status {
