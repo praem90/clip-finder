@@ -99,6 +99,7 @@ def index_video_to_db(video: VideoModel):
         frames_table.add(batch)
         
     videos_table.update(where=f"id = '{video.id}'", values={"status": "completed", "lastIndexedAt": datetime.datetime.now()})
+    # frames_table.optimize() # Optional: optimize the index after adding new data
     cap.release()
 
 @app.get("/search")
@@ -106,15 +107,21 @@ def search(query: str|None = None, tags: list[str] = []):
     videos_table = db.open_table("videos")
     frames_table = db.open_table("frames")
 
-    frames = frames_table.search(model.encode(query).tolist()).metric("cosine").select(["video_id", "timestamp"]).limit(100).to_list() if query else []
+    upper_bound = 0.75
+    frames = frames_table.search(model.encode(query).tolist()).metric("cosine").select(["video_id", "timestamp"]).distance_range(upper_bound=upper_bound).limit(100).to_list() if query else []
     tags_in_clause = f"[{', '.join(repr(x) for x in tags)}]" if tags else "['']"
     # video_ids_in_clause = f"({', '.join(repr(x.video_id) for x in video_ids)})" if video_ids else "('')"
     video_ids = set(x["video_id"] for x in frames)
     video_ids_in_clause = f"({', '.join(repr(x) for x in video_ids)})" if video_ids else "('')"
 
     videos = videos_table.search().where(f"array_has_any(tags, {tags_in_clause})").where(f"id IN {video_ids_in_clause}").to_list() 
+
     for idx, frame in enumerate(frames):
         frame['video'] = next((v for v in videos if v["id"] == frame['video_id']), None)
+        frame['similarity_score'] = 1 - frame['_distance']  # Convert distance to similarity
+        # The similarity_score from 0.25 to 0.45 is equal to confidence 0 to 100
+        frame['confidence'] = ((frame['similarity_score'] - 0.15) / (0.45 - 0.25)) if 0.15 <= frame['similarity_score'] <= 0.45 else 0
+
 
     return {"results": frames}
 
@@ -122,6 +129,8 @@ def search(query: str|None = None, tags: list[str] = []):
 def list_videos():
     videos_table = db.open_table("videos")
     videos = videos_table.search().to_pydantic(VideoModel)
+    videos.sort(key=lambda x: x.lastIndexedAt, reverse=True)
+
     return {"results": videos}
 
 @app.delete("/videos/{video_id}", status_code=204)
@@ -231,8 +240,8 @@ def get_sprite(video_id: str, timestamp: float):
 
 @app.get("/install")
 def install():
-    db.create_table("videos", schema=VideoModel)
-    db.create_table("frames", schema=FrameModel)
+    db.create_table("videos", schema=VideoModel, mode="overwrite")
+    frames_table = db.create_table("frames", schema=FrameModel, mode="overwrite")
     return {"status": "LanceDB tables created!"}
 
 if __name__ == '__main__':

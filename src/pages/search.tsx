@@ -39,7 +39,7 @@ export function Search() {
 							{(isPending) && <div>Loading...</div>}
 							{(isError) && <div>Error: {error?.message}</div>}
 							{data?.results.length === 0 && <div>No results found.</div>}
-							<div className="grid grid-cols-3 md:grid-cols-6 xl:grid-cols-9 2xl:grid-cols-12 gap-4">
+							<div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-9 gap-4">
 
 								{data?.results.map((result: SearchResult) => (
 									<SearchResultItem key={`${result.video.id}-${result.timestamp}`} result={result} />

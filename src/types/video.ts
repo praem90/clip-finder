@@ -18,6 +18,6 @@ export interface SearchResult {
 	video_id: string;
 	timestamp: number;
 	video: Video;
-	_distance?: number; // Optional field for search result relevance scoring
+	confidence?: number; // Optional field for search result relevance scoring
 }
 

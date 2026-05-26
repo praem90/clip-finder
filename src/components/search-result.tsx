@@ -9,7 +9,7 @@ const iconPath = await resolveResource('icons/32x32.png'); // Example icon path,
 
 export function SearchResultItem({ result }: { result: SearchResult }) {
 	const name = result.video.path.split('/').slice(-1)[0];
-	const score = Math.round((result._distance ?? 0) * 100);
+	const score = Math.round((result.confidence ?? 0) * 100);
 	console.log(iconPath);
 	const dragClip = async (e: React.DragEvent) => {
 		e.preventDefault();
@@ -23,7 +23,7 @@ export function SearchResultItem({ result }: { result: SearchResult }) {
 	return (
 		<Card className="relative" draggable onDragStart={dragClip}>
 			<img src={getUrl(result)} alt={result.video.name} className="w-full h-auto rounded-t-xl" />
-			<Badge className={`absolute top-2 right-2 rounded-full px-2 ${scoreToTextColor(result._distance ?? 0)} ${scoreToBgColor(result._distance ?? 0)}`} title={`Relevance Score: ${score}%`}>{score}%</Badge>
+			<Badge className={`absolute top-2 right-2 rounded-full px-2 ${scoreToTextColor(result.confidence ?? 0)} ${scoreToBgColor(result.confidence ?? 0)}`} title={`Relevance Score: ${score}%`}>{score}%</Badge>
 			<CardHeader>
 				<CardTitle>{name}</CardTitle>
 				<CardDescription>
