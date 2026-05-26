@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, ReactNode, useContext, useState } from "react";
 
 export enum Page {
 	Search = "search",
@@ -17,10 +17,6 @@ export const NavigationContext = createContext<NavigationContextType>({
 
 export const NavigationProvider = ({ children }: { children: ReactNode }) => {
 	const [activePage, setActivePage] = useState(Page.Search);
-
-	useEffect(() => {
-		console.log("Active page changed:", activePage);
-	}, []);
 
 	return (<NavigationContext.Provider value={{ activePage, setActivePage }}>
 		{children}

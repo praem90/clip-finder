@@ -30,7 +30,7 @@ export function Search() {
 				<CardHeader>
 					<CardTitle>Seach</CardTitle>
 				</CardHeader>
-				<CardContent>
+				<CardContent className="h-full overflow-y-auto">
 					<Field>
 						<Input onChange={(e) => setQuery(e.target.value)} placeholder="Search for videos..." className="mb-4" />
 					</Field>

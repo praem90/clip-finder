@@ -14,8 +14,10 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from "#components/
 import IndexStatus from "#components/index-status";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Spinner } from "#components/ui/spinner";
+import { open } from '@tauri-apps/plugin-dialog';
+
 
 
 export function Media() {
@@ -26,9 +28,40 @@ export function Media() {
 
 	const queryClient = useQueryClient()
 
+	const pickFiles = async () => {
+		const files = await open({
+			multiple: true,
+			directory: false,
+		});
+
+		if (!files) return; // User cancelled the file picker
+
+		files.forEach((path: string) => {
+			const dropEvent = new CustomEvent('tauri-file-dropped', {
+				detail: path
+			});
+			window.dispatchEvent(dropEvent);
+		});
+	};
+
 	useEffect(() => {
 		const handleFileDrop = async (e) => {
+			if (!e.detail) {
+				return;
+			}
+
+			const allowedExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv'];
+			const allowed = allowedExtensions.some(ext => e.detail.toLowerCase().endsWith(ext));
+			if (!allowed) {
+				toast.error('Unsupported file type. Please drop a video file.');
+				return;
+			}
+
 			try {
+				if (e.detail?.indexOf('.mp4') === -1) {
+					toast.error('No file path provided for indexing.');
+					return;
+				}
 				await indexVideo({ videoPath: e.detail });
 				toast.success('Video indexed successfully!');
 			} catch (err) {
@@ -51,11 +84,14 @@ export function Media() {
 
 	return (
 		<Card className="h-full">
-			<CardHeader>
-				<CardTitle>Media</CardTitle>
-				<CardDescription>
-					List of all indexed videos. Drag and drop new video files to add them to the library.
-				</CardDescription>
+			<CardHeader className="flex justify-between items-center">
+				<div >
+					<CardTitle>Media</CardTitle>
+					<CardDescription>
+						List of all indexed videos. Drag and drop new video files to add them to the library.
+					</CardDescription>
+				</div>
+				<Button variant="outline" onClick={pickFiles}><Plus /> Add</Button>
 			</CardHeader>
 			<CardContent>
 				<Table>

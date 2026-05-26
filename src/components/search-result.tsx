@@ -10,20 +10,18 @@ const iconPath = await resolveResource('icons/32x32.png'); // Example icon path,
 export function SearchResultItem({ result }: { result: SearchResult }) {
 	const name = result.video.path.split('/').slice(-1)[0];
 	const score = Math.round((result.confidence ?? 0) * 100);
-	console.log(iconPath);
 	const dragClip = async (e: React.DragEvent) => {
 		e.preventDefault();
 
 		startDrag({
 			item: [result.video.path],
 			icon: iconPath, // Optional: Set a custom icon for the drag operation
-			// title: `${name} @ ${formatTimecode(result.timestamp)} (Score: ${score}%)`
 		});
 	}
 	return (
 		<Card className="relative" draggable onDragStart={dragClip}>
-			<img src={getUrl(result)} alt={result.video.name} className="w-full h-auto rounded-t-xl" />
-			<Badge className={`absolute top-2 right-2 rounded-full px-2 ${scoreToTextColor(result.confidence ?? 0)} ${scoreToBgColor(result.confidence ?? 0)}`} title={`Relevance Score: ${score}%`}>{score}%</Badge>
+			<img src={getUrl(result)} alt={result.video.name} className="relative z-20 aspect-video w-full object-contain rounded-t-xl" />
+			<Badge className={`absolute top-2 right-2 rounded-full px-2 z-22 ${scoreToTextColor(result.confidence ?? 0)} ${scoreToBgColor(result.confidence ?? 0)}`} title={`Relevance Score: ${score}%`}>{score}%</Badge>
 			<CardHeader>
 				<CardTitle>{name}</CardTitle>
 				<CardDescription>
