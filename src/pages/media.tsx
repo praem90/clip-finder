@@ -45,7 +45,11 @@ export function Media() {
 	};
 
 	useEffect(() => {
-		const handleFileDrop = async (e) => {
+		const handleFileDrop = async (e: CustomEvent<string> | Event) => {
+			if (!(e instanceof CustomEvent)) {
+				return;
+			}
+
 			if (!e.detail) {
 				return;
 			}
@@ -62,13 +66,13 @@ export function Media() {
 					toast.error('No file path provided for indexing.');
 					return;
 				}
-				await indexVideo({ videoPath: e.detail });
+				await indexVideo({ path: e.detail });
 				toast.success('Video indexed successfully!');
-			} catch (err) {
+			} catch (err: any) {
 				toast.error(`Failed to index video: ${err.message}`);
 			} finally {
 				// Invalidate the videos query to refresh the list after indexing
-				queryClient.invalidateQueries(['videos']);
+				queryClient.invalidateQueries({ queryKey: ['videos'] });
 			}
 		};
 		window.addEventListener('tauri-file-dropped', handleFileDrop);
@@ -129,7 +133,7 @@ export function MediaRow({ video }: { video: Video }) {
 			toast.error(`Failed to re-index video: ${err.message}`);
 		}).finally(() => {
 			setReIndexing(false);
-			queryClient.invalidateQueries(['videos']);
+			queryClient.invalidateQueries({ queryKey: ['videos'] });
 		});
 	};
 
@@ -142,7 +146,7 @@ export function MediaRow({ video }: { video: Video }) {
 			toast.error(`Failed to delete video: ${err.message}`);
 		}).finally(() => {
 			setDeleting(false);
-			queryClient.invalidateQueries(['videos']);
+			queryClient.invalidateQueries({ queryKey: ['videos'] });
 		});
 	}
 

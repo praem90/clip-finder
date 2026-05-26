@@ -7,7 +7,7 @@ import { listen, TauriEvent } from '@tauri-apps/api/event';
 import { Toaster } from "#components/ui/sonner";
 import { NavigationProvider } from "@/contexts/NavigationContext";
 
-listen(TauriEvent.DRAG_DROP, (event) => {
+listen(TauriEvent.DRAG_DROP, (event: { payload: { paths: string[] } }) => {
   const filePaths = event.payload;
   if (filePaths?.paths?.length > 0) {
     filePaths.paths.forEach((path: string) => {

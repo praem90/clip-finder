@@ -15,9 +15,8 @@ const textColorMap = {
 	[Status.FAILED]: "text-red-950",
 }
 
-const IndexStatus = ({ status }) => {
-
-	const statusText = Object.entries(Status).find(([value, key]) => key === status)?.[0] || "Unknown";
+const IndexStatus = ({ status }: { status: Status }) => {
+	const statusText = Object.entries(Status).find(([_, key]) => key === status)?.[0] || "Unknown";
 	return (<Badge className={`${bgColorMap[status]} ${textColorMap[status]}`} > {statusText}</Badge >);
 }
 

@@ -10,7 +10,7 @@ import {
 	SidebarTrigger
 } from "#components/ui/sidebar"
 import { Library, Search } from "lucide-react"
-import { useNavigation } from "@/contexts/NavigationContext";
+import { useNavigation, Page } from "@/contexts/NavigationContext";
 
 export function AppSidebar() {
 	const { activePage, setActivePage } = useNavigation();
@@ -21,10 +21,10 @@ export function AppSidebar() {
 				<SidebarGroup>
 					<SidebarMenu>
 						<SidebarMenuItem>
-							<SidebarMenuButton asChild isActive={activePage === "search"} onClick={() => setActivePage("search")}>
+							<SidebarMenuButton isActive={activePage === "search"} onClick={() => setActivePage(Page.Search)}>
 								<Search /> Search
 							</SidebarMenuButton>
-							<SidebarMenuButton asChild isActive={activePage === "library"} onClick={() => setActivePage("library")}>
+							<SidebarMenuButton isActive={activePage === "library"} onClick={() => setActivePage(Page.Library)}>
 								<Library /> Library
 							</SidebarMenuButton>
 						</SidebarMenuItem>
