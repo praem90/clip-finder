@@ -4,13 +4,24 @@ from lancedb.pydantic import LanceModel, Vector
 import cv2
 import lancedb
 import uuid
-from sentence_transformers import SentenceTransformer
 from PIL import Image
 import numpy as np
-import multiprocessing
 import datetime
+import threading
 import os
+import sys
 import uvicorn
+import multiprocessing
+from contextlib import asynccontextmanager
+import logging
+
+# Stop Hugging Face from checking the internet
+os.environ["HF_HUB_OFFLINE"] = "1"
+
+# Stop PyTorch from spawning unnecessary background threads
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
 
 class VideoModel(LanceModel):
     id: str
@@ -25,21 +36,44 @@ class FrameModel(LanceModel):
     timestamp: float
     vector: Vector(512)
 
-DB_PATH = "./.db"  # This folder will be created on your disk
+DB_PATH = "/Users/praem90/personal/video-search-ai/ClipFinder/engine/.db"  # This folder will be created on your disk
 MODEL_NAME = 'clip-ViT-B-32'
-MODEL_PATH = './.models/clip-ViT-B-32'  # Local path to save the model
+MODEL_PATH = '/Users/praem90/personal/video-search-ai/ClipFinder/engine/.models/clip-ViT-B-32'  # Local path to save the model
 
-model = SentenceTransformer(MODEL_PATH)
+model = None
+db = None
 
-if not os.path.exists(MODEL_PATH):
-    print(f"Downloading model '{MODEL_NAME}' from Hugging Face...")
-    model = SentenceTransformer(MODEL_NAME)
-    os.makedirs(DB_PATH, exist_ok=True)
-    model.save(MODEL_PATH)  # Save the model locally for future use
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-db = lancedb.connect(DB_PATH)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global db, model
+    db = lancedb.connect(DB_PATH)
+    from sentence_transformers import SentenceTransformer
 
-app = FastAPI()
+    if not os.path.exists(MODEL_PATH):
+        logger.info(f"Downloading model '{MODEL_NAME}' from Hugging Face...")
+        model = SentenceTransformer(MODEL_NAME)
+        os.makedirs(DB_PATH, exist_ok=True)
+        model.save(MODEL_PATH)  # Save the model locally for future use
+    else:
+        logger.info(f"Loading model '{MODEL_NAME}' from '{MODEL_PATH}...")
+        model = SentenceTransformer(MODEL_PATH)
+
+    # Startup code can go here (if needed)
+    yield
+    # db.close()  
+    del model  # Clean up the model from memory on shutdown
+    # Shutdown code can go here (if needed)
+
+logger.info("Booting Application.")
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -244,6 +278,26 @@ def install():
     frames_table = db.create_table("frames", schema=FrameModel, mode="overwrite")
     return {"status": "LanceDB tables created!"}
 
+def polite_suicide_when_orphaned():
+    """Waits for Tauri to die, then asks Uvicorn to shut down gracefully."""
+    try:
+        # Blocks quietly until the Tauri pipe breaks
+        sys.stdin.read()
+    except Exception:
+        pass
+    finally:
+        print("Tauri parent died. Triggering graceful shutdown...")
+        
+        # Instead of os._exit(0), we send a standard termination signal to ourselves.
+        # Uvicorn catches this, stops HTTP traffic, and runs the lifespan shutdown.
+        if os.name == 'nt':
+            # Windows standard termination
+            os.kill(os.getpid(), signal.SIGTERM)
+        else:
+            # Mac/Linux standard termination
+            os.kill(os.getpid(), signal.SIGTERM)
+
 if __name__ == '__main__':
     multiprocessing.freeze_support()
-    uvicorn.run("main:app", host="0.0.0.0", port=58000, reload=False, workers=2)
+    threading.Thread(target=polite_suicide_when_orphaned, daemon=True)
+    uvicorn.run(app, host="0.0.0.0", port=58000, reload=False)
