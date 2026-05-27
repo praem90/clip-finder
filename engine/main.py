@@ -15,9 +15,6 @@ import multiprocessing
 from contextlib import asynccontextmanager
 import logging
 
-# Stop Hugging Face from checking the internet
-os.environ["HF_HUB_OFFLINE"] = "1"
-
 # Stop PyTorch from spawning unnecessary background threads
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -66,12 +63,18 @@ logger.setLevel(logging.INFO)
 async def lifespan(app: FastAPI):
     global db, model
     db = lancedb.connect(DB_PATH)
+
+    # Only block HF network calls once the model is already cached locally.
+    # On first boot we need the network to fetch the weights.
+    if os.path.exists(MODEL_PATH):
+        os.environ["HF_HUB_OFFLINE"] = "1"
+
     from sentence_transformers import SentenceTransformer
 
     if not os.path.exists(MODEL_PATH):
         logger.info(f"Downloading model '{MODEL_NAME}' from Hugging Face...")
         model = SentenceTransformer(MODEL_NAME)
-        os.makedirs(DB_PATH, exist_ok=True)
+        os.makedirs(MODEL_PATH, exist_ok=True)
         model.save(MODEL_PATH)  # Save the model locally for future use
     else:
         logger.info(f"Loading model '{MODEL_NAME}' from '{MODEL_PATH}...")
