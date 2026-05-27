@@ -33,7 +33,7 @@ export function SearchResultItem({ result }: { result: SearchResult }) {
 }
 
 const getUrl = (result: SearchResult) => {
-	return `http://localhost:8000/frame?video_id=${result.video.id}&timestamp=${result.timestamp}`;
+	return `http://localhost:58000/frame?video_id=${result.video.id}&timestamp=${result.timestamp}`;
 }
 
 const formatTimecode = (seconds: number) => {

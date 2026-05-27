@@ -4,7 +4,7 @@ import { Video } from "@/types/video";
 import { SearchResult } from "../types/video";
 
 const apiClient = axios.create({
-	baseURL: "http://localhost:8000",
+	baseURL: "http://localhost:58000",
 	headers: {
 		"Content-Type": "application/json",
 	},
