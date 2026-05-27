@@ -36,9 +36,20 @@ class FrameModel(LanceModel):
     timestamp: float
     vector: Vector(512)
 
-DB_PATH = "/Users/praem90/personal/video-search-ai/ClipFinder/engine/.db"  # This folder will be created on your disk
+def get_resource_path(relative_path):
+    """ Get the absolute path to a resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # If running normally (python backend.py), use the current directory
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+DB_PATH = get_resource_path(".db")  # This folder will be created on your disk
 MODEL_NAME = 'clip-ViT-B-32'
-MODEL_PATH = '/Users/praem90/personal/video-search-ai/ClipFinder/engine/.models/clip-ViT-B-32'  # Local path to save the model
+MODEL_PATH = get_resource_path('.models/clip-ViT-B-32')  # Local path to save the model
 
 model = None
 db = None
