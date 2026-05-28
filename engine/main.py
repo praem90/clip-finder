@@ -62,7 +62,7 @@ logger.setLevel(logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global db, model
-    shouldInstall = os.path.exists(DB_PATH) 
+    shouldInstall = False if os.path.exists(DB_PATH) else True
     db = lancedb.connect(DB_PATH)
 
     # Only block HF network calls once the model is already cached locally.
@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
 
     from sentence_transformers import SentenceTransformer
 
-    if not shouldInstall :
+    if shouldInstall :
         logger.info(f"Creating new LanceDB at '{DB_PATH}'...")
         install()  # Create tables if DB is new
 
