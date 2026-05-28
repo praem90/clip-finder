@@ -12,7 +12,7 @@ export function App() {
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar />
-        <main className="p-4 pt-0 h-screen w-full">
+        <main className="h-screen w-full overflow-hidden">
           {activePage === Page.Search && <Search />}
           {activePage === Page.Library && <Media />}
         </main>
