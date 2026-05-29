@@ -1,6 +1,12 @@
+use futures::lock::Mutex;
 use lancedb::Connection;
+use tauri::Emitter;
 use tauri::Manager;
-use tauri_plugin_shell::{process::CommandEvent, ShellExt};
+use tauri_plugin_shell::process::Command;
+use tauri_plugin_shell::{
+    process::{CommandChild, CommandEvent},
+    ShellExt,
+};
 
 mod database;
 
@@ -11,7 +17,17 @@ fn greet(name: &str) -> String {
 }
 
 struct AppState {
-    db: Connection,
+    db: Mutex<Option<Connection>>,
+    engine_process: Mutex<Option<CommandChild>>,
+}
+
+impl AppState {
+    fn new() -> Self {
+        AppState {
+            db: Mutex::new(None),
+            engine_process: Mutex::new(None),
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,6 +37,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_drag::init())
+        .manage(AppState::new())
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -39,10 +56,28 @@ pub fn run() {
                     .spawn()
                     .expect("Failed to spawn the process");
 
+                let state = handle.state::<AppState>();
+                let mut engine_process = state.engine_process.lock().await;
+                *engine_process = Some(_child);
+
                 while let Some(event) = _rx.recv().await {
                     if let CommandEvent::Stdout(line) = &event {
+                        let line_str = String::from_utf8(line.clone()).unwrap();
+                        if line_str.contains("Application startup complete") {
+                            println!("Engine is ready!");
+                            handle.emit("engine_ready", {}).unwrap();
+                        }
+                        println!("Received stdout: {}", line_str);
+                    }
+
+                    if let CommandEvent::Stderr(line) = &event {
+                        let line_str = String::from_utf8(line.clone()).unwrap();
+                        if line_str.contains("Application startup complete") {
+                            println!("Engine is ready!");
+                            handle.emit("engine_ready", {}).unwrap();
+                        }
                         println!(
-                            "Received stdout: {}",
+                            "Received stderr: {}",
                             String::from_utf8(line.clone()).unwrap()
                         );
                     }
@@ -57,20 +92,33 @@ pub fn run() {
                 .join("lib")
                 .join(".db");
 
-            let db = tauri::async_runtime::block_on(async {
-                let db = lancedb::connect(db_path.to_str().unwrap())
+            let state = app.state::<AppState>().clone();
+            tauri::async_runtime::block_on(async {
+                let connection = lancedb::connect(db_path.to_str().unwrap())
                     .execute()
                     .await
                     .unwrap();
 
-                database::create_tables(&db).await.unwrap();
+                database::create_tables(&connection).await.unwrap();
 
-                return db;
+                let mut db_state = state.db.lock().await;
+                *db_state = Some(connection);
             });
 
-            app.manage(AppState { db });
-
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                let app_handle = window.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = app_handle.state::<AppState>();
+                    let mut engine_process = state.engine_process.lock().await;
+                    if let Some(child) = engine_process.take() {
+                        println!("We got the process and Killing it... {}", child.pid());
+                        child.kill().expect("Failed to kill the process");
+                    }
+                });
+            }
         })
         .invoke_handler(tauri::generate_handler![greet])
         .invoke_handler(tauri::generate_handler![database::get_videos])

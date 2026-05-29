@@ -1,3 +1,4 @@
+use crate::AppState;
 use arrow_json::ArrayWriter;
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
@@ -5,11 +6,8 @@ use lancedb::{
     arrow::arrow_schema::{DataType, Field, Schema, TimeUnit},
     Connection,
 };
-use tauri::State;
-
 use std::sync::Arc;
-
-use crate::AppState;
+use tauri::State;
 
 pub async fn create_tables(db: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let video_schema = Arc::new(Schema::new(vec![
@@ -34,7 +32,11 @@ pub async fn create_tables(db: &Connection) -> Result<(), Box<dyn std::error::Er
 
 #[tauri::command]
 pub async fn get_videos(state: State<'_, AppState>) -> Result<String, String> {
-    let table = &state.db.open_table("videos").execute().await.unwrap();
+    let db_lock = state.db.lock().await;
+    let connection = db_lock
+        .as_ref()
+        .ok_or("Database connection not initialized")?;
+    let table = connection.open_table("videos").execute().await.unwrap();
     let batches = table
         .query()
         .limit(100)

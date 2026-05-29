@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Plus, RefreshCw, Trash2, FileVideo, Inbox } from "lucide-react";
 import { Spinner } from "#components/ui/spinner";
 import { open } from '@tauri-apps/plugin-dialog';
-import { invoke } from '@tauri-apps/api/core';
 
 export function Media() {
   const { isPending, isError, data, error } = useQuery({
@@ -84,7 +83,7 @@ export function Media() {
     };
   }, []);
 
-  const videos = data?.results ?? [];
+  const videos = data ?? [];
   const stats = useMemo(() => {
     const counts = { total: videos.length, indexed: 0, processing: 0, pending: 0 };
     videos.forEach((v: Video) => {
