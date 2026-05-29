@@ -881,7 +881,9 @@ dependencies = [
 name = "clipfinder"
 version = "0.1.0"
 dependencies = [
+ "arrow-array",
  "arrow-json",
+ "chrono",
  "futures",
  "lancedb",
  "serde",

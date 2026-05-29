@@ -83,7 +83,7 @@ export function Media() {
     };
   }, []);
 
-  const videos = data ?? [];
+  const videos = data?.results ?? [];
   const stats = useMemo(() => {
     const counts = { total: videos.length, indexed: 0, processing: 0, pending: 0 };
     videos.forEach((v: Video) => {
@@ -245,7 +245,7 @@ function MediaRow({ video, idx }: { video: Video; idx: number }) {
 
   const fileName = video.path.split('/').slice(-1)[0];
   const directory = video.path.split('/').slice(0, -1).join('/');
-  const indexed = new Date(video.lastIndexedAt);
+  const indexed = new Date(video.lastIndexedAt || video.last_indexed_at);
 
   return (
     <tr className="group/row border-t border-white/5 transition-colors hover:bg-white/[0.025]">

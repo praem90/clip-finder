@@ -1,14 +1,17 @@
 use futures::lock::Mutex;
-use lancedb::Connection;
 use tauri::Emitter;
 use tauri::Manager;
-use tauri_plugin_shell::process::Command;
 use tauri_plugin_shell::{
     process::{CommandChild, CommandEvent},
     ShellExt,
 };
 
+mod commands;
 mod database;
+
+use crate::commands::video::get_videos;
+use crate::database::connection;
+use crate::database::connection::Connection;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -92,17 +95,12 @@ pub fn run() {
                 .join("lib")
                 .join(".db");
 
-            let state = app.state::<AppState>().clone();
+            let handle = app.handle().clone();
             tauri::async_runtime::block_on(async {
-                let connection = lancedb::connect(db_path.to_str().unwrap())
-                    .execute()
+                let connection = connection::init(db_path.to_str().unwrap())
                     .await
-                    .unwrap();
-
-                database::create_tables(&connection).await.unwrap();
-
-                let mut db_state = state.db.lock().await;
-                *db_state = Some(connection);
+                    .expect("Failed to initialize database connection");
+                handle.manage(connection.clone());
             });
 
             Ok(())
@@ -121,7 +119,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![greet])
-        .invoke_handler(tauri::generate_handler![database::get_videos])
+        .invoke_handler(tauri::generate_handler![get_videos])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
