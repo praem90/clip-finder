@@ -1,12 +1,11 @@
-use candle_transformers::models::clip::ClipModel;
 use lancedb::Connection;
 use std::fs;
 use std::process::Command;
 use tempfile::Builder;
 
+use crate::database;
 use crate::database::models::{Frame, Video};
-use crate::database::{self, operations};
-use crate::engine::clip;
+use crate::engine::engine::ClipEngine;
 
 pub fn extract_frames(video_path: &str) -> Result<tempfile::TempDir, String> {
     let temp_dir = Builder::new()
@@ -82,14 +81,17 @@ pub async fn extract_single_frame(
 // You will need the `image` crate in your Cargo.toml for this
 pub async fn index_video(
     connection: &Connection,
-    model: &ClipModel,
-    device: &candle_core::Device,
+    engine: &ClipEngine,
     video: &Video,
 ) -> Result<(), String> {
     println!("Extracting frames from {}", video.path);
     if video.status != "processing" {
-        operations::update_video_status(connection, video.id.clone(), "processing".to_string())
-            .await?;
+        database::operations::update_video_status(
+            connection,
+            video.id.clone(),
+            "processing".to_string(),
+        )
+        .await?;
     }
     let temp_dir = extract_frames(video.path.as_str()).unwrap();
 
@@ -107,9 +109,9 @@ pub async fn index_video(
 
         let timestamp_seconds = index;
 
-        let embeddings =
-            clip::get_image_embedding(model, device, image_path.to_str().as_ref().unwrap())
-                .map_err(|e| format!("Failed to get image embedding: {}", e))?;
+        let embeddings = engine
+            .get_image_embedding(image_path.to_str().as_ref().unwrap())
+            .map_err(|e| format!("Failed to get image embedding: {}", e))?;
 
         let frame = Frame {
             video_id: video.id.clone(),
@@ -121,7 +123,12 @@ pub async fn index_video(
         database::operations::create_frames(connection, frame).await;
     }
     println!("Indexed {} frames for video {}", entries.len(), video.name);
-    operations::update_video_status(connection, video.id.clone(), "completed".to_string()).await?;
+    database::operations::update_video_status(
+        connection,
+        video.id.clone(),
+        "completed".to_string(),
+    )
+    .await?;
 
     // When the function ends, `temp_dir` goes out of scope and the OS deletes all the JPEGs automatically!
     Ok(())

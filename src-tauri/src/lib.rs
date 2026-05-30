@@ -1,9 +1,7 @@
-use candle_core::Device;
-use candle_transformers::models::clip::ClipModel;
+use std::sync::Arc;
+
 use futures::lock::Mutex;
 use tauri::Manager;
-
-use tokenizers::tokenizer::Tokenizer;
 
 mod commands;
 mod database;
@@ -13,17 +11,13 @@ use crate::commands::video;
 use crate::database::connection;
 
 struct AppState {
-    model: Mutex<Option<ClipModel>>,
-    tokenizer: Mutex<Option<Tokenizer>>,
-    device: Device,
+    engine: Arc<Mutex<Option<engine::engine::ClipEngine>>>,
 }
 
 impl AppState {
     fn new() -> Self {
         AppState {
-            model: Mutex::new(None),
-            tokenizer: Mutex::new(None),
-            device: engine::clip::get_best_device().unwrap().clone(),
+            engine: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -50,13 +44,8 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let app_state_clone = handle.state::<AppState>();
-                let (model, tokenizer) = engine::clip::get_model(&app_state_clone.device);
-
-                let mut model_lock = app_state_clone.model.lock().await;
-                *model_lock = Some(model);
-
-                let mut tokenizer_lock = app_state_clone.tokenizer.lock().await;
-                *tokenizer_lock = Some(tokenizer);
+                let mut engine_lock = app_state_clone.engine.lock().await;
+                *engine_lock = Some(engine::engine::ClipEngine::new());
             });
 
             Ok(())
