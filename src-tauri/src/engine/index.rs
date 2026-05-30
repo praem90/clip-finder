@@ -42,7 +42,7 @@ pub fn extract_frames(video_path: &str) -> Result<tempfile::TempDir, String> {
     Ok(temp_dir)
 }
 
-pub fn extract_single_frame(
+pub async fn extract_single_frame(
     video_path: &str,
     timestamp_seconds: f64,
     output_path: &str,

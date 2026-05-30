@@ -105,8 +105,12 @@ pub async fn index_video(
 }
 
 #[tauri::command]
-pub fn get_frame_image(video_path: String, timestamp: f64) -> Result<tauri::ipc::Response, String> {
+pub async fn get_frame_image(
+    video_path: String,
+    timestamp: f64,
+) -> Result<tauri::ipc::Response, String> {
     let temp_dir = std::env::temp_dir();
+    // TODO: sanitize video name to prevent path traversal
     let frame_filename = format!(
         "{}_{}.jpg",
         video_path.split('/').last().unwrap_or("unknown_video"),
@@ -119,6 +123,7 @@ pub fn get_frame_image(video_path: String, timestamp: f64) -> Result<tauri::ipc:
             timestamp,
             frame_path.to_str().unwrap(),
         )
+        .await
         .map_err(|e| format!("Failed to extract frame: {}", e))
         .unwrap();
     }

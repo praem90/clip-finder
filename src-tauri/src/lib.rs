@@ -37,7 +37,7 @@ pub fn run() {
             let db_path = app.path().app_data_dir().unwrap().join(".db");
 
             let handle_clone = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
+            tauri::async_runtime::block_on(async move {
                 let connection = connection::init(db_path.to_str().unwrap())
                     .await
                     .expect("Failed to initialize database connection");
