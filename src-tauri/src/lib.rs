@@ -61,7 +61,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             video::get_videos,
             video::search_frames,
-            video::index_video
+            video::index_video,
+            video::get_frame_image,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

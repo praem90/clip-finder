@@ -13,16 +13,11 @@ const apiClient = axios.create({
 });
 
 export const getVideos = async (): Promise<ApiResponse<Video[]>> => {
-        return invoke("get_videos").then(r => {
-                console.log("Videos:", r);
-                return r as ApiResponse<Video[]>;
-        });
-        // return apiClient.get<ApiResponse<Video[]>>("/videos").then((response) => response.data);
+        return invoke<ApiResponse<Video[]>>("get_videos");
 };
 
-export const indexVideo = async (params: { path: string }): Promise<ApiResponse<Video>> => {
-        return invoke("index_video", params).then(r => console.log(r));
-        return apiClient.post<ApiResponse<Video>>("/index", params).then((response) => response.data);
+export const indexVideo = async (params: { path: string }): Promise<void> => {
+        return invoke("index_video", params);
 }
 
 export const searchVideos = async (params: { query: string }): Promise<ApiResponse<SearchResult[]>> => {
@@ -34,7 +29,6 @@ export const searchVideos = async (params: { query: string }): Promise<ApiRespon
 
                 return res as ApiResponse<SearchResult[]>;
         });
-        return apiClient.get<ApiResponse<SearchResult[]>>("/search", { params }).then((response) => response.data);
 };
 
 export const deleteVideo = async (videoId: string) => {
@@ -44,3 +38,7 @@ export const deleteVideo = async (videoId: string) => {
 export const reIndexVideo = async (videoId: string) => {
         return apiClient.post(`/index/${videoId}`).then((response) => response.data);
 };
+
+export const getFrameThumbnail = async (videoPath: string, timestamp: number): Promise<ArrayBuffer> => {
+        return invoke("get_frame_image", { videoPath, timestamp });
+}

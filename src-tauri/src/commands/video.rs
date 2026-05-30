@@ -103,3 +103,29 @@ pub async fn index_video(
 
     return Ok(res);
 }
+
+#[tauri::command]
+pub fn get_frame_image(video_path: String, timestamp: f64) -> tauri::ipc::Response {
+    let temp_dir = std::env::temp_dir();
+    let frame_filename = format!(
+        "{}_{}.jpg",
+        video_path.split('/').last().unwrap_or("unknown_video"),
+        timestamp as u64
+    );
+    let frame_path = temp_dir.join(frame_filename);
+    if !frame_path.exists() {
+        let status = engine::index::extract_single_frame(
+            video_path.as_str(),
+            timestamp,
+            frame_path.to_str().unwrap(),
+        )
+        .map_err(|e| format!("Failed to extract frame: {}", e));
+
+        if let Err(e) = status {
+            return tauri::ipc::Response::new(e);
+        }
+    }
+
+    let data = std::fs::read(frame_path).map_err(|e| format!("Failed to read frame image: {}", e));
+    tauri::ipc::Response::new(data.unwrap())
+}

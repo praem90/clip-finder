@@ -42,6 +42,43 @@ pub fn extract_frames(video_path: &str) -> Result<tempfile::TempDir, String> {
     Ok(temp_dir)
 }
 
+pub fn extract_single_frame(
+    video_path: &str,
+    timestamp_seconds: f64,
+    output_path: &str,
+) -> Result<(), String> {
+    let status = Command::new("ffmpeg")
+        // 1. CRITICAL: -ss BEFORE -i makes the seek instantaneous
+        .arg("-ss")
+        .arg(timestamp_seconds.to_string())
+        // 2. Specify the input video
+        .arg("-i")
+        .arg(video_path)
+        // 3. Tell FFmpeg to stop after grabbing exactly 1 frame
+        .arg("-vframes")
+        .arg("1")
+        // 4. Set high JPEG quality (2 is excellent, 31 is worst)
+        // .arg("-q:v")
+        // .arg("2")
+        // 5. Overwrite the output file if it already exists
+        .arg("-y")
+        // 6. Suppress unnecessary terminal output
+        .arg("-hide_banner")
+        .arg("-loglevel")
+        .arg("error")
+        // 7. Define the target destination
+        .arg(output_path)
+        // Execute the process
+        .status()
+        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+
+    if !status.success() {
+        return Err("FFmpeg failed to extract the requested frame".to_string());
+    }
+
+    Ok(())
+}
+
 // You will need the `image` crate in your Cargo.toml for this
 pub async fn index_video(
     connection: &Connection,
