@@ -149,11 +149,12 @@ pub async fn update_video_status(
 pub async fn search_frames(
     connection: &Connection,
     model: &ClipModel,
+    device: &candle_core::Device,
     tokenizer: &Tokenizer,
     query: String,
 ) -> Result<Vec<(Frame, Video)>, String> {
     let frames_table = connection.open_table("frames").execute().await.unwrap();
-    let query_embedding = clip::get_text_embedding(model, tokenizer, query).unwrap();
+    let query_embedding = clip::get_text_embedding(model, device, tokenizer, query).unwrap();
     let frames_batches = frames_table
         .query()
         .nearest_to(query_embedding)
