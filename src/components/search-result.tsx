@@ -95,11 +95,6 @@ function ScorePill({ score }: { score: number }) {
   );
 }
 
-const getUrl = (result: SearchResult) => {
-  getFrameThumbnail(result.video.path, result.timestamp);
-  return `http://localhost:58000/frame?video_id=${result.video.id}&timestamp=${result.timestamp}`;
-}
-
 const formatTimecode = (seconds: number) => {
   const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
   const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');

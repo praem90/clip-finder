@@ -32,8 +32,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "icons/32x32.png": "icons/32x32.png",
-      "../engine/dist/engine/": "engine/"
+      "icons/32x32.png": "icons/32x32.png"
     }
   }
 }
