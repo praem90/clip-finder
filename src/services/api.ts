@@ -21,6 +21,7 @@ export const getVideos = async (): Promise<ApiResponse<Video[]>> => {
 };
 
 export const indexVideo = async (params: { path: string }): Promise<ApiResponse<Video>> => {
+        return invoke("index_video", params).then(r => console.log(r));
         return apiClient.post<ApiResponse<Video>>("/index", params).then((response) => response.data);
 }
 

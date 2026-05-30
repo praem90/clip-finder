@@ -42,8 +42,7 @@ pub fn get_text_embedding(text: String) -> Result<Vec<f32>, String> {
         .unwrap());
 }
 
-pub fn get_image_embedding(path: String) -> Result<Vec<f32>, String> {
-    let (model, _) = get_model();
+pub fn get_image_embedding(model: &ClipModel, path: &str) -> Result<Vec<f32>, String> {
     let config = ClipVisionConfig::vit_base_patch32();
     let img = image::ImageReader::open(path)
         .map_err(|e| format!("Failed to open image: {:?}", e))?

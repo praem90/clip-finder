@@ -1,6 +1,9 @@
-use arrow_array::types::TimestampMicrosecondType;
+use std::sync::Arc;
+
+use arrow_array::types::{Float32Type, TimestampMicrosecondType};
 use arrow_array::{
-    Array, Float32Array, Float64Array, ListArray, PrimitiveArray, RecordBatch, StringArray,
+    new_empty_array, Array, FixedSizeListArray, Float32Array, Float64Array, ListArray,
+    PrimitiveArray, RecordBatch, RecordBatchIterator, StringArray,
 };
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
@@ -29,6 +32,66 @@ pub async fn get_videos(connection: &Connection) -> Result<Vec<Video>, String> {
         .collect::<Vec<Video>>();
 
     Ok(videos)
+}
+
+pub async fn create_video(connection: &Connection, video: Video) -> Result<Video, String> {
+    let table = connection.open_table("videos").execute().await.unwrap();
+
+    let record_batch = RecordBatch::try_new(
+        table.schema().await.unwrap(),
+        vec![
+            Arc::new(StringArray::from(vec![video.id.clone()])),
+            Arc::new(StringArray::from(vec![video.path.clone()])),
+            Arc::new(StringArray::from(vec![video.name.clone()])),
+            Arc::new(StringArray::from(vec![video.status.clone()])),
+            new_empty_array(
+                table
+                    .schema()
+                    .await
+                    .unwrap()
+                    .field_with_name("tags")
+                    .unwrap()
+                    .data_type(),
+            ),
+            Arc::new(PrimitiveArray::<TimestampMicrosecondType>::from(vec![
+                video
+                    .last_indexed_at
+                    .map(|dt| dt.timestamp_micros())
+                    .unwrap_or(0),
+            ])),
+        ],
+    )
+    .unwrap();
+
+    let batches = RecordBatchIterator::new(vec![Ok(record_batch)], table.schema().await.unwrap());
+    table.add(batches).execute().await.unwrap();
+
+    return Ok(video);
+}
+
+pub async fn create_frames(connection: &Connection, frame: Frame) {
+    let frames_table = connection.open_table("frames").execute().await.unwrap();
+
+    let embeddings = vec![frame.vector.unwrap()];
+    let vector_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+        embeddings
+            .into_iter()
+            .map(|vec| Some(vec.into_iter().map(Some).collect::<Vec<_>>())),
+        512,
+    );
+    let record_batch = RecordBatch::try_new(
+        frames_table.schema().await.unwrap(),
+        vec![
+            Arc::new(StringArray::from(vec![frame.video_id])),
+            Arc::new(vector_array),
+            Arc::new(Float64Array::from(vec![frame.timestamp])),
+        ],
+    )
+    .unwrap();
+
+    let batches =
+        RecordBatchIterator::new(vec![Ok(record_batch)], frames_table.schema().await.unwrap());
+    frames_table.add(batches).execute().await.unwrap();
 }
 
 pub async fn search_frames(

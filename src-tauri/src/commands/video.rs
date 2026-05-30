@@ -1,6 +1,8 @@
 use crate::database::connection::Connection;
 use crate::database::models::{Frame, Video};
 use crate::database::operations;
+use crate::engine;
+use chrono::{DateTime, Utc};
 use tauri::State;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -58,4 +60,34 @@ pub async fn search_frames(
     };
 
     Ok(response)
+}
+
+#[tauri::command]
+pub async fn index_video(
+    path: String,
+    connection: State<'_, Connection>,
+) -> Result<Response, String> {
+    let video = Video {
+        id: uuid::Uuid::new_v4().to_string(),
+        path: path.to_string(),
+        name: path
+            .split('/')
+            .last()
+            .unwrap_or("unknown_video")
+            .to_string(),
+        tags: vec![],
+        status: "pending".to_string(),
+        created_at: Some(Utc::now()),
+        last_indexed_at: Some(Utc::now()),
+    };
+    let video = operations::create_video(&connection, video).await.unwrap();
+    engine::index::index_video(&connection, &video);
+
+    let res = Response {
+        success: true,
+        results: vec![],
+        error: None,
+    };
+
+    return Ok(res);
 }

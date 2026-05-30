@@ -87,11 +87,11 @@ pub fn run() {
                 .join("lib")
                 .join(".db");
 
-            // let db_path = "/Users/praem90/personal/video-search-ai/ClipFinder/engine/.db";
+            let db_path = "/Users/praem90/personal/video-search-ai/ClipFinder/engine/.db";
 
             let handle = app.handle().clone();
             tauri::async_runtime::block_on(async {
-                let connection = connection::init(db_path.to_str().unwrap())
+                let connection = connection::init(db_path)
                     .await
                     .expect("Failed to initialize database connection");
                 handle.manage(connection.clone());
@@ -114,7 +114,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             video::get_videos,
-            video::search_frames
+            video::search_frames,
+            video::index_video
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
