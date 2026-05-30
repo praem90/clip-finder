@@ -83,6 +83,7 @@ pub async fn extract_single_frame(
 pub async fn index_video(
     connection: &Connection,
     model: &ClipModel,
+    device: &candle_core::Device,
     video: &Video,
 ) -> Result<(), String> {
     println!("Extracting frames from {}", video.path);
@@ -106,8 +107,9 @@ pub async fn index_video(
 
         let timestamp_seconds = index;
 
-        let embeddings = clip::get_image_embedding(&model, image_path.to_str().as_ref().unwrap())
-            .map_err(|e| format!("Failed to get image embedding: {}", e))?;
+        let embeddings =
+            clip::get_image_embedding(model, device, image_path.to_str().as_ref().unwrap())
+                .map_err(|e| format!("Failed to get image embedding: {}", e))?;
 
         let frame = Frame {
             video_id: video.id.clone(),

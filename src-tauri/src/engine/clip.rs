@@ -11,7 +11,7 @@ use hf_hub::Repo;
 use hf_hub::RepoType;
 use tokenizers::tokenizer::Tokenizer;
 
-pub fn get_model() -> (ClipModel, Tokenizer) {
+pub fn get_model(device: &Device) -> (ClipModel, Tokenizer) {
     let model_id = "sentence-transformers/clip-ViT-B-32";
     let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, "main".to_string());
     let api = Api::new().unwrap();
@@ -23,7 +23,7 @@ pub fn get_model() -> (ClipModel, Tokenizer) {
     let tokenizer_path = openai_repo.get("tokenizer.json").unwrap();
 
     let vb = unsafe {
-        VarBuilder::from_mmaped_safetensors(&[&path], DType::F32, &Device::Cpu)
+        VarBuilder::from_mmaped_safetensors(&[&path], DType::F32, device)
             .unwrap_or_else(|e| panic!("Failed to load safetensors: {:?}", e))
     };
     let tokenizer = Tokenizer::from_file(tokenizer_path).unwrap();
@@ -34,6 +34,7 @@ pub fn get_model() -> (ClipModel, Tokenizer) {
 
 pub fn get_text_embedding(
     model: &ClipModel,
+    device: &Device,
     tokenizer: &Tokenizer,
     text: String,
 ) -> Result<Vec<f32>, String> {
@@ -43,7 +44,7 @@ pub fn get_text_embedding(
 
     tokens.push(encoding.get_ids().to_vec());
     let text_features = model
-        .get_text_features(&Tensor::new(tokens, &Device::Cpu).unwrap())
+        .get_text_features(&Tensor::new(tokens, device).unwrap())
         .unwrap();
     return Ok(clip::div_l2_norm(&text_features)
         .unwrap()
@@ -53,7 +54,11 @@ pub fn get_text_embedding(
         .unwrap());
 }
 
-pub fn get_image_embedding(model: &ClipModel, path: &str) -> Result<Vec<f32>, String> {
+pub fn get_image_embedding(
+    model: &ClipModel,
+    device: &Device,
+    path: &str,
+) -> Result<Vec<f32>, String> {
     let config = ClipVisionConfig::vit_base_patch32();
     let img = image::ImageReader::open(path)
         .map_err(|e| format!("Failed to open image: {:?}", e))?
@@ -67,18 +72,14 @@ pub fn get_image_embedding(model: &ClipModel, path: &str) -> Result<Vec<f32>, St
         .to_rgb8()
         .into_raw();
 
-    let img = Tensor::from_vec(
-        img,
-        &[config.image_size, config.image_size, 3],
-        &Device::Cpu,
-    )
-    .unwrap()
-    .permute((2, 0, 1))
-    .unwrap()
-    .to_dtype(DType::F32)
-    .unwrap()
-    .affine(2. / 255., -1.)
-    .unwrap();
+    let img = Tensor::from_vec(img, &[config.image_size, config.image_size, 3], device)
+        .unwrap()
+        .permute((2, 0, 1))
+        .unwrap()
+        .to_dtype(DType::F32)
+        .unwrap()
+        .affine(2. / 255., -1.)
+        .unwrap();
 
     let image_tensor = Tensor::stack(&[img], 0).unwrap();
 
@@ -90,4 +91,16 @@ pub fn get_image_embedding(model: &ClipModel, path: &str) -> Result<Vec<f32>, St
         .unwrap()
         .to_vec1()
         .unwrap());
+}
+
+pub fn get_best_device() -> candle_core::Result<Device> {
+    // 1. Check if the Mac has a Metal-compatible GPU available
+    if candle_core::utils::metal_is_available() {
+        println!("🚀 Metal GPU detected! Using hardware acceleration.");
+        // '0' just means the first available GPU (Macs only have one anyway)
+        Ok(Device::new_metal(0)?)
+    } else {
+        println!("🐢 No Metal GPU found. Falling back to CPU.");
+        Ok(Device::Cpu)
+    }
 }

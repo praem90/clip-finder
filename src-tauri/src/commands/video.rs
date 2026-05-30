@@ -51,7 +51,9 @@ pub async fn search_frames(
     let tokenizer_lock = app_state.tokenizer.lock().await;
     let tokenizer = tokenizer_lock.as_ref().ok_or("Tokenizer not loaded yet")?;
 
-    let result = operations::search_frames(&connection, &model, &tokenizer, query).await?;
+    let result =
+        operations::search_frames(&connection, &model, &app_state.device, &tokenizer, query)
+            .await?;
 
     let response = FrameResponse {
         success: true,
@@ -91,7 +93,7 @@ pub async fn index_video(
     let video = operations::create_video(&connection, video).await.unwrap();
     let model_lock = app_state.model.lock().await;
     let model = model_lock.as_ref().ok_or("Model not loaded yet")?;
-    engine::index::index_video(&connection, &model, &video)
+    engine::index::index_video(&connection, &model, &app_state.device, &video)
         .await
         .unwrap();
 
@@ -159,7 +161,7 @@ pub async fn reindex_video(
     if let Some(video) = video {
         let model_lock = app_state.model.lock().await;
         let model = model_lock.as_ref().ok_or("Model not loaded yet")?;
-        engine::index::index_video(&connection, &model, &video)
+        engine::index::index_video(&connection, &model, &app_state.device, &video)
             .await
             .unwrap();
     } else {

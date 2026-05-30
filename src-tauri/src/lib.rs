@@ -1,3 +1,4 @@
+use candle_core::Device;
 use candle_transformers::models::clip::ClipModel;
 use futures::lock::Mutex;
 use tauri::Manager;
@@ -14,6 +15,7 @@ use crate::database::connection;
 struct AppState {
     model: Mutex<Option<ClipModel>>,
     tokenizer: Mutex<Option<Tokenizer>>,
+    device: Device,
 }
 
 impl AppState {
@@ -21,6 +23,7 @@ impl AppState {
         AppState {
             model: Mutex::new(None),
             tokenizer: Mutex::new(None),
+            device: engine::clip::get_best_device().unwrap().clone(),
         }
     }
 }
@@ -47,7 +50,7 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let app_state_clone = handle.state::<AppState>();
-                let (model, tokenizer) = engine::clip::get_model();
+                let (model, tokenizer) = engine::clip::get_model(&app_state_clone.device);
 
                 let mut model_lock = app_state_clone.model.lock().await;
                 *model_lock = Some(model);

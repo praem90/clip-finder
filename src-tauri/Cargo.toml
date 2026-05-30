@@ -31,9 +31,9 @@ arrow-json = "57.3.1"
 arrow-array = "57.3.1"
 chrono = "0.4.44"
 tokenizers = "0.23.1"
-candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.10.2" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.10.2" }
-candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.10.2" }
+candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["metal"] }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["metal"] }
+candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["metal"] }
 hf-hub = "0.5.0"
 image = "0.25.10"
 uuid = { version = "1.23.2", features = ["v4"] }
