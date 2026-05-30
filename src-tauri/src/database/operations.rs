@@ -1,4 +1,4 @@
-use arrow_array::types::{Float32Type, TimestampMicrosecondType};
+use arrow_array::types::TimestampMicrosecondType;
 use arrow_array::{
     Array, Float32Array, Float64Array, ListArray, PrimitiveArray, RecordBatch, StringArray,
 };

@@ -1,17 +1,10 @@
-use candle_core::safetensors::load;
 use candle_core::DType;
 use candle_core::Device;
 use candle_core::Tensor;
-use candle_nn::ops::softmax;
-use candle_nn::Module;
 use candle_nn::VarBuilder;
 use candle_transformers::models::clip;
 use candle_transformers::models::clip::vision_model::ClipVisionConfig;
-use candle_transformers::models::clip::vision_model::ClipVisionTransformer;
-use candle_transformers::models::clip::{
-    text_model::{ClipTextConfig, ClipTextTransformer},
-    ClipConfig, ClipModel,
-};
+use candle_transformers::models::clip::{ClipConfig, ClipModel};
 
 use tokenizers::tokenizer::Tokenizer;
 
