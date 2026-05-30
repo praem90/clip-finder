@@ -6,21 +6,29 @@ use candle_transformers::models::clip;
 use candle_transformers::models::clip::vision_model::ClipVisionConfig;
 use candle_transformers::models::clip::{ClipConfig, ClipModel};
 
+use hf_hub::api::sync::Api;
+use hf_hub::Repo;
+use hf_hub::RepoType;
 use tokenizers::tokenizer::Tokenizer;
 
 pub fn get_model() -> (ClipModel, Tokenizer) {
-    let config = ClipConfig::vit_base_patch32();
+    let model_id = "sentence-transformers/clip-ViT-B-32";
+    let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, "main".to_string());
+    let api = Api::new().unwrap();
 
-    let paths = [
-            "/Users/praem90/personal/video-search-ai/ClipFinder/engine/.models/clip-ViT-B-32/model.safetensors",
-    ];
+    let repo = api.repo(repo);
+    let path = repo.get("0_CLIPModel/model.safetensors").unwrap();
+
+    let openai_repo = api.model("openai/clip-vit-base-patch32".to_string());
+    let tokenizer_path = openai_repo.get("tokenizer.json").unwrap();
 
     let vb = unsafe {
-        VarBuilder::from_mmaped_safetensors(&paths, DType::F32, &Device::Cpu)
+        VarBuilder::from_mmaped_safetensors(&[&path], DType::F32, &Device::Cpu)
             .unwrap_or_else(|e| panic!("Failed to load safetensors: {:?}", e))
     };
-    let tokenizer = Tokenizer::from_file("/Users/praem90/personal/video-search-ai/ClipFinder/engine/.models/clip-vit-base-patch32/tokenizer.json").unwrap();
+    let tokenizer = Tokenizer::from_file(tokenizer_path).unwrap();
 
+    let config = ClipConfig::vit_base_patch32();
     return (ClipModel::new(vb, &config).unwrap(), tokenizer);
 }
 

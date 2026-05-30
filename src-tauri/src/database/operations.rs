@@ -159,7 +159,7 @@ pub async fn search_frames(
         .nearest_to(query_embedding)
         .unwrap()
         .distance_type(lancedb::DistanceType::Cosine)
-        // .distance_range(None, Some(0.75))
+        .distance_range(None, Some(0.75))
         .select(lancedb::query::Select::Columns(vec![
             "video_id".to_string(),
             "timestamp".to_string(),
