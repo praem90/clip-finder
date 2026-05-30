@@ -3,7 +3,6 @@ export interface Video {
 	name: string;
 	path: string;
 	status: Status;
-	lastIndexedAt: string;
 	last_indexed_at: string;
 }
 

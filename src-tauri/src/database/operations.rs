@@ -1,14 +1,18 @@
 use std::sync::Arc;
 
+use arrow_array::builder::{ListBuilder, StringBuilder};
 use arrow_array::types::{Float32Type, TimestampMicrosecondType};
 use arrow_array::{
-    new_empty_array, Array, FixedSizeListArray, Float32Array, Float64Array, ListArray,
-    PrimitiveArray, RecordBatch, RecordBatchIterator, StringArray,
+    Array, FixedSizeListArray, Float32Array, Float64Array, ListArray, PrimitiveArray, RecordBatch,
+    RecordBatchIterator, StringArray,
 };
+use candle_transformers::models::clip::ClipModel;
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 use lancedb::Connection;
+
+use tokenizers::tokenizer::Tokenizer;
 
 use crate::database::models::{Frame, Video};
 use crate::engine::clip;
@@ -37,6 +41,15 @@ pub async fn get_videos(connection: &Connection) -> Result<Vec<Video>, String> {
 pub async fn create_video(connection: &Connection, video: Video) -> Result<Video, String> {
     let table = connection.open_table("videos").execute().await.unwrap();
 
+    let mut list_builder = ListBuilder::new(StringBuilder::new());
+    for tag in &video.tags {
+        list_builder.values().append_value(tag);
+    }
+    if video.tags.len() == 0 {
+        list_builder.values().append_null();
+    }
+    list_builder.append(true);
+
     let record_batch = RecordBatch::try_new(
         table.schema().await.unwrap(),
         vec![
@@ -44,15 +57,7 @@ pub async fn create_video(connection: &Connection, video: Video) -> Result<Video
             Arc::new(StringArray::from(vec![video.path.clone()])),
             Arc::new(StringArray::from(vec![video.name.clone()])),
             Arc::new(StringArray::from(vec![video.status.clone()])),
-            new_empty_array(
-                table
-                    .schema()
-                    .await
-                    .unwrap()
-                    .field_with_name("tags")
-                    .unwrap()
-                    .data_type(),
-            ),
+            Arc::new(list_builder.finish()),
             Arc::new(PrimitiveArray::<TimestampMicrosecondType>::from(vec![
                 video
                     .last_indexed_at
@@ -83,8 +88,8 @@ pub async fn create_frames(connection: &Connection, frame: Frame) {
         frames_table.schema().await.unwrap(),
         vec![
             Arc::new(StringArray::from(vec![frame.video_id])),
-            Arc::new(vector_array),
             Arc::new(Float64Array::from(vec![frame.timestamp])),
+            Arc::new(vector_array),
         ],
     )
     .unwrap();
@@ -94,12 +99,32 @@ pub async fn create_frames(connection: &Connection, frame: Frame) {
     frames_table.add(batches).execute().await.unwrap();
 }
 
+pub async fn update_video_status(
+    connection: &Connection,
+    video_id: String,
+    status: String,
+) -> Result<(), String> {
+    let videos_table = connection.open_table("videos").execute().await.unwrap();
+
+    videos_table
+        .update()
+        .only_if(format!("id = '{}'", video_id))
+        .column("status", format!("'{}'", status))
+        .execute()
+        .await
+        .unwrap();
+
+    Ok(())
+}
+
 pub async fn search_frames(
     connection: &Connection,
+    model: &ClipModel,
+    tokenizer: &Tokenizer,
     query: String,
 ) -> Result<Vec<(Frame, Video)>, String> {
     let frames_table = connection.open_table("frames").execute().await.unwrap();
-    let query_embedding = clip::get_text_embedding(query).unwrap();
+    let query_embedding = clip::get_text_embedding(model, tokenizer, query).unwrap();
     let frames_batches = frames_table
         .query()
         .nearest_to(query_embedding)
@@ -239,7 +264,7 @@ fn convert_record_batch_to_videos(batch: &RecordBatch) -> Vec<Video> {
         .unwrap();
 
     let last_indexed_at_col = batch
-        .column_by_name("lastIndexedAt")
+        .column_by_name("last_indexed_at")
         .unwrap()
         .as_any()
         .downcast_ref::<PrimitiveArray<TimestampMicrosecondType>>()
@@ -255,7 +280,13 @@ fn convert_record_batch_to_videos(batch: &RecordBatch) -> Vec<Video> {
             .expect("Failed to downcast list array to StringArray");
         let tags = string_array
             .iter()
-            .map(|j| j.unwrap().to_string())
+            .filter_map(|j| {
+                if j.is_some() {
+                    Some(j.unwrap().to_string())
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<String>>();
 
         let last_indexed_at = if last_indexed_at_col.is_null(i) {

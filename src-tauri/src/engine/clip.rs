@@ -24,8 +24,11 @@ pub fn get_model() -> (ClipModel, Tokenizer) {
     return (ClipModel::new(vb, &config).unwrap(), tokenizer);
 }
 
-pub fn get_text_embedding(text: String) -> Result<Vec<f32>, String> {
-    let (model, tokenizer) = get_model();
+pub fn get_text_embedding(
+    model: &ClipModel,
+    tokenizer: &Tokenizer,
+    text: String,
+) -> Result<Vec<f32>, String> {
     let mut tokens = vec![];
 
     let encoding = tokenizer.encode(text, true).unwrap();

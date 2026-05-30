@@ -43,8 +43,15 @@ pub async fn get_videos(connection: State<'_, Connection>) -> Result<Response, S
 pub async fn search_frames(
     query: String,
     connection: State<'_, Connection>,
+    app_state: State<'_, crate::AppState>,
 ) -> Result<FrameResponse, String> {
-    let result = operations::search_frames(&connection, query).await?;
+    let model_lock = app_state.model.lock().await;
+    let model = model_lock.as_ref().ok_or("Model not loaded yet")?;
+
+    let tokenizer_lock = app_state.tokenizer.lock().await;
+    let tokenizer = tokenizer_lock.as_ref().ok_or("Tokenizer not loaded yet")?;
+
+    let result = operations::search_frames(&connection, &model, &tokenizer, query).await?;
 
     let response = FrameResponse {
         success: true,
@@ -66,6 +73,7 @@ pub async fn search_frames(
 pub async fn index_video(
     path: String,
     connection: State<'_, Connection>,
+    app_state: State<'_, crate::AppState>,
 ) -> Result<Response, String> {
     let video = Video {
         id: uuid::Uuid::new_v4().to_string(),
@@ -81,7 +89,11 @@ pub async fn index_video(
         last_indexed_at: Some(Utc::now()),
     };
     let video = operations::create_video(&connection, video).await.unwrap();
-    engine::index::index_video(&connection, &video);
+    let model_lock = app_state.model.lock().await;
+    let model = model_lock.as_ref().ok_or("Model not loaded yet")?;
+    engine::index::index_video(&connection, &model, &video)
+        .await
+        .unwrap();
 
     let res = Response {
         success: true,
