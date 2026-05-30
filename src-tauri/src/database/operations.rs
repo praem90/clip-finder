@@ -6,16 +6,12 @@ use arrow_array::{
     Array, FixedSizeListArray, Float32Array, Float64Array, ListArray, PrimitiveArray, RecordBatch,
     RecordBatchIterator, StringArray,
 };
-use candle_transformers::models::clip::ClipModel;
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 use lancedb::Connection;
 
-use tokenizers::tokenizer::Tokenizer;
-
 use crate::database::models::{Frame, Video};
-use crate::engine::clip;
 
 pub async fn get_videos(connection: &Connection) -> Result<Vec<Video>, String> {
     let table = connection.open_table("videos").execute().await.unwrap();
@@ -148,16 +144,12 @@ pub async fn update_video_status(
 
 pub async fn search_frames(
     connection: &Connection,
-    model: &ClipModel,
-    device: &candle_core::Device,
-    tokenizer: &Tokenizer,
-    query: String,
+    query_embeddings: &Vec<f32>,
 ) -> Result<Vec<(Frame, Video)>, String> {
     let frames_table = connection.open_table("frames").execute().await.unwrap();
-    let query_embedding = clip::get_text_embedding(model, device, tokenizer, query).unwrap();
     let frames_batches = frames_table
         .query()
-        .nearest_to(query_embedding)
+        .nearest_to(query_embeddings.clone())
         .unwrap()
         .distance_type(lancedb::DistanceType::Cosine)
         .distance_range(None, Some(0.75))

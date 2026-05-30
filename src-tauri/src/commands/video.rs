@@ -45,15 +45,14 @@ pub async fn search_frames(
     connection: State<'_, Connection>,
     app_state: State<'_, crate::AppState>,
 ) -> Result<FrameResponse, String> {
-    let model_lock = app_state.model.lock().await;
-    let model = model_lock.as_ref().ok_or("Model not loaded yet")?;
+    let engine_lock = app_state.engine.lock().await;
+    let engine = engine_lock.as_ref().ok_or("Model not loaded yet")?;
 
-    let tokenizer_lock = app_state.tokenizer.lock().await;
-    let tokenizer = tokenizer_lock.as_ref().ok_or("Tokenizer not loaded yet")?;
+    let embeddings = engine
+        .get_text_embedding(query.clone())
+        .map_err(|e| format!("Failed to get text embedding: {}", e))?;
 
-    let result =
-        operations::search_frames(&connection, &model, &app_state.device, &tokenizer, query)
-            .await?;
+    let result = operations::search_frames(&connection, &embeddings).await?;
 
     let response = FrameResponse {
         success: true,
@@ -91,9 +90,9 @@ pub async fn index_video(
         last_indexed_at: Some(Utc::now()),
     };
     let video = operations::create_video(&connection, video).await.unwrap();
-    let model_lock = app_state.model.lock().await;
-    let model = model_lock.as_ref().ok_or("Model not loaded yet")?;
-    engine::index::index_video(&connection, &model, &app_state.device, &video)
+    let engine_lock = app_state.engine.lock().await;
+    let engine = engine_lock.as_ref().ok_or("Engine not loaded yet")?;
+    engine::index::index_video(&connection, &engine, &video)
         .await
         .unwrap();
 
@@ -159,9 +158,9 @@ pub async fn reindex_video(
         .await
         .unwrap();
     if let Some(video) = video {
-        let model_lock = app_state.model.lock().await;
-        let model = model_lock.as_ref().ok_or("Model not loaded yet")?;
-        engine::index::index_video(&connection, &model, &app_state.device, &video)
+        let engine_lock = app_state.engine.lock().await;
+        let engine = engine_lock.as_ref().ok_or("Engine not loaded yet")?;
+        engine::index::index_video(&connection, &engine, &video)
             .await
             .unwrap();
     } else {
