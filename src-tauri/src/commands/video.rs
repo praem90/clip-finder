@@ -2,7 +2,7 @@ use crate::database::connection::Connection;
 use crate::database::models::{Frame, Video};
 use crate::database::operations;
 use crate::engine;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use tauri::State;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -125,4 +125,41 @@ pub fn get_frame_image(video_path: String, timestamp: f64) -> Result<tauri::ipc:
 
     let data = std::fs::read(frame_path).map_err(|e| format!("Failed to read frame image: {}", e));
     Ok(tauri::ipc::Response::new(data.unwrap()))
+}
+
+#[tauri::command]
+pub async fn delete_video(
+    video_id: String,
+    connection: State<'_, Connection>,
+) -> Result<(), String> {
+    operations::delete_video(&connection, video_id)
+        .await
+        .unwrap();
+
+    return Ok(());
+}
+
+#[tauri::command]
+pub async fn reindex_video(
+    video_id: String,
+    connection: State<'_, Connection>,
+    app_state: State<'_, crate::AppState>,
+) -> Result<(), String> {
+    operations::delete_frames_by_video_id(&connection, video_id.clone())
+        .await
+        .unwrap();
+    let video = operations::get_video_by_id(&connection, video_id.clone())
+        .await
+        .unwrap();
+    if let Some(video) = video {
+        let model_lock = app_state.model.lock().await;
+        let model = model_lock.as_ref().ok_or("Model not loaded yet")?;
+        engine::index::index_video(&connection, &model, &video)
+            .await
+            .unwrap();
+    } else {
+        return Err("Video not found".to_string());
+    }
+
+    return Ok(());
 }

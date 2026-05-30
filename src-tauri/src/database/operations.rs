@@ -38,6 +38,35 @@ pub async fn get_videos(connection: &Connection) -> Result<Vec<Video>, String> {
     Ok(videos)
 }
 
+pub async fn get_video_by_id(
+    connection: &Connection,
+    video_id: String,
+) -> Result<Option<Video>, String> {
+    let table = connection.open_table("videos").execute().await.unwrap();
+    let batches = table
+        .query()
+        .only_if(format!("id = '{}'", video_id))
+        .limit(1)
+        .execute()
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+
+    if batches.is_empty() {
+        return Ok(None);
+    }
+
+    let videos = batches
+        .iter()
+        .map(|batch| convert_record_batch_to_videos(batch))
+        .flatten()
+        .collect::<Vec<Video>>();
+
+    Ok(videos.into_iter().next())
+}
+
 pub async fn create_video(connection: &Connection, video: Video) -> Result<Video, String> {
     let table = connection.open_table("videos").execute().await.unwrap();
 
@@ -308,4 +337,27 @@ fn convert_record_batch_to_videos(batch: &RecordBatch) -> Vec<Video> {
     }
 
     return videos;
+}
+
+pub async fn delete_video(connection: &Connection, video_id: String) -> Result<(), String> {
+    let videos_table = connection.open_table("videos").execute().await.unwrap();
+    videos_table
+        .delete(format!("id = '{}'", video_id).as_str())
+        .await
+        .unwrap();
+
+    delete_frames_by_video_id(connection, video_id).await
+}
+
+pub async fn delete_frames_by_video_id(
+    connection: &Connection,
+    video_id: String,
+) -> Result<(), String> {
+    let frames_table = connection.open_table("frames").execute().await.unwrap();
+    frames_table
+        .delete(format!("video_id = '{}'", video_id).as_str())
+        .await
+        .unwrap();
+
+    Ok(())
 }
