@@ -15,6 +15,7 @@ pub struct Video {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Frame {
     pub video_id: String,
-    pub timestamp: i64,
-    pub vector: Vec<f32>,
+    pub timestamp: f64,
+    pub vector: Option<Vec<f32>>,
+    pub confidence: Option<f32>,
 }

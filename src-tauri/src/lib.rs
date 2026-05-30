@@ -8,26 +8,18 @@ use tauri_plugin_shell::{
 
 mod commands;
 mod database;
+mod engine;
 
-use crate::commands::video::get_videos;
+use crate::commands::video;
 use crate::database::connection;
-use crate::database::connection::Connection;
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
 
 struct AppState {
-    db: Mutex<Option<Connection>>,
     engine_process: Mutex<Option<CommandChild>>,
 }
 
 impl AppState {
     fn new() -> Self {
         AppState {
-            db: Mutex::new(None),
             engine_process: Mutex::new(None),
         }
     }
@@ -42,62 +34,64 @@ pub fn run() {
         .plugin(tauri_plugin_drag::init())
         .manage(AppState::new())
         .setup(|app| {
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let api_path = handle
-                    .path()
-                    .resource_dir()
-                    .unwrap()
-                    .join("engine")
-                    .join("engine");
+            // let handle = app.handle().clone();
+            // tauri::async_runtime::spawn(async move {
+            //     let api_path = handle
+            //         .path()
+            //         .resource_dir()
+            //         .unwrap()
+            //         .join("engine")
+            //         .join("engine");
+            //
+            //     println!("API Path: {:?}", api_path);
+            //
+            //     let (mut _rx, _child) = handle
+            //         .shell()
+            //         .command(api_path.to_str().unwrap())
+            //         .spawn()
+            //         .expect("Failed to spawn the process");
+            //
+            //     let state = handle.state::<AppState>();
+            //     let mut engine_process = state.engine_process.lock().await;
+            //     *engine_process = Some(_child);
+            //
+            //     while let Some(event) = _rx.recv().await {
+            //         if let CommandEvent::Stdout(line) = &event {
+            //             let line_str = String::from_utf8(line.clone()).unwrap();
+            //             if line_str.contains("Application startup complete") {
+            //                 println!("Engine is ready!");
+            //                 handle.emit("engine_ready", {}).unwrap();
+            //             }
+            //             println!("Received stdout: {}", line_str);
+            //         }
+            //
+            //         if let CommandEvent::Stderr(line) = &event {
+            //             let line_str = String::from_utf8(line.clone()).unwrap();
+            //             if line_str.contains("Application startup complete") {
+            //                 println!("Engine is ready!");
+            //                 handle.emit("engine_ready", {}).unwrap();
+            //             }
+            //             println!(
+            //                 "Received stderr: {}",
+            //                 String::from_utf8(line.clone()).unwrap()
+            //             );
+            //         }
+            //     }
+            // });
+            //
+            // let db_path = app
+            //     .path()
+            //     .resource_dir()
+            //     .unwrap()
+            //     .join("engine")
+            //     .join("lib")
+            //     .join(".db");
 
-                println!("API Path: {:?}", api_path);
-
-                let (mut _rx, _child) = handle
-                    .shell()
-                    .command(api_path.to_str().unwrap())
-                    .spawn()
-                    .expect("Failed to spawn the process");
-
-                let state = handle.state::<AppState>();
-                let mut engine_process = state.engine_process.lock().await;
-                *engine_process = Some(_child);
-
-                while let Some(event) = _rx.recv().await {
-                    if let CommandEvent::Stdout(line) = &event {
-                        let line_str = String::from_utf8(line.clone()).unwrap();
-                        if line_str.contains("Application startup complete") {
-                            println!("Engine is ready!");
-                            handle.emit("engine_ready", {}).unwrap();
-                        }
-                        println!("Received stdout: {}", line_str);
-                    }
-
-                    if let CommandEvent::Stderr(line) = &event {
-                        let line_str = String::from_utf8(line.clone()).unwrap();
-                        if line_str.contains("Application startup complete") {
-                            println!("Engine is ready!");
-                            handle.emit("engine_ready", {}).unwrap();
-                        }
-                        println!(
-                            "Received stderr: {}",
-                            String::from_utf8(line.clone()).unwrap()
-                        );
-                    }
-                }
-            });
-
-            let db_path = app
-                .path()
-                .resource_dir()
-                .unwrap()
-                .join("engine")
-                .join("lib")
-                .join(".db");
+            let db_path = "/Users/praem90/personal/video-search-ai/ClipFinder/engine/.db";
 
             let handle = app.handle().clone();
             tauri::async_runtime::block_on(async {
-                let connection = connection::init(db_path.to_str().unwrap())
+                let connection = connection::init(db_path)
                     .await
                     .expect("Failed to initialize database connection");
                 handle.manage(connection.clone());
@@ -118,8 +112,10 @@ pub fn run() {
                 });
             }
         })
-        .invoke_handler(tauri::generate_handler![greet])
-        .invoke_handler(tauri::generate_handler![get_videos])
+        .invoke_handler(tauri::generate_handler![
+            video::get_videos,
+            video::search_frames
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

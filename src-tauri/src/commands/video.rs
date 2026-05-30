@@ -1,5 +1,5 @@
 use crate::database::connection::Connection;
-use crate::database::models::Video;
+use crate::database::models::{Frame, Video};
 use crate::database::operations;
 use tauri::State;
 
@@ -10,6 +10,13 @@ pub struct Response {
     error: Option<String>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FrameResponse {
+    success: bool,
+    results: Vec<(Frame, Video)>,
+    error: Option<String>,
+}
+
 #[tauri::command]
 pub async fn get_videos(connection: State<'_, Connection>) -> Result<Response, String> {
     let videos = operations::get_videos(&connection).await?;
@@ -17,6 +24,22 @@ pub async fn get_videos(connection: State<'_, Connection>) -> Result<Response, S
     let response = Response {
         success: true,
         results: videos,
+        error: None,
+    };
+
+    Ok(response)
+}
+
+#[tauri::command]
+pub async fn search_frames(
+    query: String,
+    connection: State<'_, Connection>,
+) -> Result<FrameResponse, String> {
+    let result = operations::search_frames(&connection, query).await?;
+
+    let response = FrameResponse {
+        success: true,
+        results: result,
         error: None,
     };
 
