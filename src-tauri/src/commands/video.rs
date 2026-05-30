@@ -11,9 +11,16 @@ pub struct Response {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FrameResult {
+    video: Video,
+    frame: Frame,
+    confidence: Option<f32>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FrameResponse {
     success: bool,
-    results: Vec<(Frame, Video)>,
+    results: Vec<FrameResult>,
     error: Option<String>,
 }
 
@@ -39,7 +46,14 @@ pub async fn search_frames(
 
     let response = FrameResponse {
         success: true,
-        results: result,
+        results: result
+            .iter()
+            .map(|(frame, video)| FrameResult {
+                video: video.clone(),
+                frame: frame.clone(),
+                confidence: frame.confidence,
+            })
+            .collect(),
         error: None,
     };
 

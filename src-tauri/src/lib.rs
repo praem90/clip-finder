@@ -34,64 +34,64 @@ pub fn run() {
         .plugin(tauri_plugin_drag::init())
         .manage(AppState::new())
         .setup(|app| {
-            // let handle = app.handle().clone();
-            // tauri::async_runtime::spawn(async move {
-            //     let api_path = handle
-            //         .path()
-            //         .resource_dir()
-            //         .unwrap()
-            //         .join("engine")
-            //         .join("engine");
-            //
-            //     println!("API Path: {:?}", api_path);
-            //
-            //     let (mut _rx, _child) = handle
-            //         .shell()
-            //         .command(api_path.to_str().unwrap())
-            //         .spawn()
-            //         .expect("Failed to spawn the process");
-            //
-            //     let state = handle.state::<AppState>();
-            //     let mut engine_process = state.engine_process.lock().await;
-            //     *engine_process = Some(_child);
-            //
-            //     while let Some(event) = _rx.recv().await {
-            //         if let CommandEvent::Stdout(line) = &event {
-            //             let line_str = String::from_utf8(line.clone()).unwrap();
-            //             if line_str.contains("Application startup complete") {
-            //                 println!("Engine is ready!");
-            //                 handle.emit("engine_ready", {}).unwrap();
-            //             }
-            //             println!("Received stdout: {}", line_str);
-            //         }
-            //
-            //         if let CommandEvent::Stderr(line) = &event {
-            //             let line_str = String::from_utf8(line.clone()).unwrap();
-            //             if line_str.contains("Application startup complete") {
-            //                 println!("Engine is ready!");
-            //                 handle.emit("engine_ready", {}).unwrap();
-            //             }
-            //             println!(
-            //                 "Received stderr: {}",
-            //                 String::from_utf8(line.clone()).unwrap()
-            //             );
-            //         }
-            //     }
-            // });
-            //
-            // let db_path = app
-            //     .path()
-            //     .resource_dir()
-            //     .unwrap()
-            //     .join("engine")
-            //     .join("lib")
-            //     .join(".db");
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let api_path = handle
+                    .path()
+                    .resource_dir()
+                    .unwrap()
+                    .join("engine")
+                    .join("engine");
 
-            let db_path = "/Users/praem90/personal/video-search-ai/ClipFinder/engine/.db";
+                println!("API Path: {:?}", api_path);
+
+                let (mut _rx, _child) = handle
+                    .shell()
+                    .command(api_path.to_str().unwrap())
+                    .spawn()
+                    .expect("Failed to spawn the process");
+
+                let state = handle.state::<AppState>();
+                let mut engine_process = state.engine_process.lock().await;
+                *engine_process = Some(_child);
+
+                while let Some(event) = _rx.recv().await {
+                    if let CommandEvent::Stdout(line) = &event {
+                        let line_str = String::from_utf8(line.clone()).unwrap();
+                        if line_str.contains("Application startup complete") {
+                            println!("Engine is ready!");
+                            handle.emit("engine_ready", {}).unwrap();
+                        }
+                        println!("Received stdout: {}", line_str);
+                    }
+
+                    if let CommandEvent::Stderr(line) = &event {
+                        let line_str = String::from_utf8(line.clone()).unwrap();
+                        if line_str.contains("Application startup complete") {
+                            println!("Engine is ready!");
+                            handle.emit("engine_ready", {}).unwrap();
+                        }
+                        println!(
+                            "Received stderr: {}",
+                            String::from_utf8(line.clone()).unwrap()
+                        );
+                    }
+                }
+            });
+
+            let db_path = app
+                .path()
+                .resource_dir()
+                .unwrap()
+                .join("engine")
+                .join("lib")
+                .join(".db");
+
+            // let db_path = "/Users/praem90/personal/video-search-ai/ClipFinder/engine/.db";
 
             let handle = app.handle().clone();
             tauri::async_runtime::block_on(async {
-                let connection = connection::init(db_path)
+                let connection = connection::init(db_path.to_str().unwrap())
                     .await
                     .expect("Failed to initialize database connection");
                 handle.manage(connection.clone());
