@@ -117,6 +117,13 @@ pub async fn index_video(
             }
         }
     }
+    drop(stdout);
+    let status = child
+        .wait()
+        .map_err(|e| format!("Failed to wait for FFmpeg: {}", e))?;
+    if !status.success() {
+        return Err("FFmpeg failed while streaming frames".to_string());
+    }
 
     println!("Indexed {} frames for video {}", frame_count, video.name);
     database::operations::update_video_status(
