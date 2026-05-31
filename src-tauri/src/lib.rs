@@ -1,10 +1,25 @@
-use tauri::Manager;
-use tauri_plugin_shell::ShellExt;
+use std::sync::Arc;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+use futures::lock::Mutex;
+use tauri::Manager;
+
+mod commands;
+mod database;
+mod engine;
+
+use crate::commands::video;
+use crate::database::connection;
+
+struct AppState {
+    engine: Arc<Mutex<Option<engine::engine::ClipEngine>>>,
+}
+
+impl AppState {
+    fn new() -> Self {
+        AppState {
+            engine: Arc::new(Mutex::new(None)),
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -14,24 +29,35 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_drag::init())
+        .manage(AppState::new())
         .setup(|app| {
-            let api_path = app
-                .path()
-                .resource_dir()
-                .unwrap()
-                .join("engine")
-                .join("engine");
+            let db_path = app.path().app_data_dir().unwrap().join(".db");
 
-            println!("API Path: {:?}", api_path);
+            let handle_clone = app.handle().clone();
+            tauri::async_runtime::block_on(async move {
+                let connection = connection::init(db_path.to_str().unwrap())
+                    .await
+                    .expect("Failed to initialize database connection");
+                handle_clone.manage(connection.clone());
+            });
 
-            let (mut _rx, _child) = app
-                .shell()
-                .command(api_path.to_str().unwrap())
-                .spawn()
-                .expect("Failed to spawn the process");
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let app_state_clone = handle.state::<AppState>();
+                let mut engine_lock = app_state_clone.engine.lock().await;
+                *engine_lock = Some(engine::engine::ClipEngine::new());
+            });
+
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            video::get_videos,
+            video::search_frames,
+            video::index_video,
+            video::get_frame_image,
+            video::delete_video,
+            video::reindex_video,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
