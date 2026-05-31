@@ -31,10 +31,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf protobuf-compiler
 
+      - name: install dependencies (MacOS only)
         if: matrix.platform == 'macos-latest' # This must match the platform value defined above.
         run: |
           brew install protobuf
 
+      - name: install dependencies (Windows only)
         if: matrix.platform == 'windows-latest' # This must match the platform value defined above.
         run: |
           choco install protoc -y
