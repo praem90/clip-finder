@@ -1,9 +1,14 @@
-import { ApiResponse } from "@/types/api";
+import { ApiResponse, PaginatedResponse } from "@/types/api";
 import { Video, SearchResult } from "@/types/video";
 import { invoke } from '@tauri-apps/api/core';
 
-export const getVideos = async (): Promise<ApiResponse<Video[]>> => {
-  return invoke<ApiResponse<Video[]>>("get_videos");
+export const getVideos = async (
+  params?: { page?: number; pageSize?: number }
+): Promise<PaginatedResponse<Video[]>> => {
+  return invoke<PaginatedResponse<Video[]>>("get_videos", {
+    page: params?.page ?? 1,
+    pageSize: params?.pageSize ?? 15,
+  });
 };
 
 export const indexVideo = async (params: { path: string }): Promise<void> => {
