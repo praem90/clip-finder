@@ -48,10 +48,6 @@ export function Media() {
       }
 
       try {
-        if (e.detail?.indexOf('.mp4') === -1) {
-          toast.error('No file path provided for indexing.');
-          return;
-        }
         await indexVideo({ path: e.detail });
         toast.success('Video indexed successfully!');
       } catch (err: any) {
