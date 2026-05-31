@@ -1,45 +1,10 @@
 use lancedb::Connection;
-use std::fs;
-use std::process::Command;
-use tempfile::Builder;
+use std::io::Read;
+use std::process::{Command, Stdio};
 
 use crate::database;
 use crate::database::models::{Frame, Video};
 use crate::engine::engine::ClipEngine;
-
-pub fn extract_frames(video_path: &str) -> Result<tempfile::TempDir, String> {
-    let temp_dir = Builder::new()
-        .prefix("clipfinder_")
-        .tempdir()
-        .map_err(|e| e.to_string())?;
-    let output_pattern = temp_dir.path().join("frame_%04d.jpg");
-    println!(
-        "Extracting frames to temporary directory: {:?}",
-        temp_dir.path()
-    );
-
-    let status = Command::new("ffmpeg")
-        .arg("-i")
-        .arg(video_path)
-        .arg("-vf")
-        .arg("fps=1") // Extract 1 frame per second
-        .arg("-q:v")
-        .arg("2") // High-quality JPEG
-        .arg(output_pattern.to_str().unwrap())
-        .arg("-hide_banner")
-        .arg("-loglevel")
-        .arg("error") // Only print actual crashes
-        .status()
-        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
-
-    if !status.success() {
-        return Err("FFmpeg failed to extract frames".to_string());
-    } else {
-        println!("Frames extracted successfully.");
-    }
-
-    Ok(temp_dir)
-}
 
 pub async fn extract_single_frame(
     video_path: &str,
@@ -93,36 +58,67 @@ pub async fn index_video(
         )
         .await?;
     }
-    let temp_dir = extract_frames(video.path.as_str()).unwrap();
+    let width = 224; // CLIP's required width
+    let height = 224; // CLIP's required height
 
-    // Read the directory
-    let mut entries = fs::read_dir(temp_dir.path())
-        .map_err(|e| e.to_string())?
-        .filter_map(Result::ok)
-        .collect::<Vec<_>>();
+    let mut child = Command::new("ffmpeg")
+        .arg("-i")
+        .arg(video.path.as_str())
+        // Extract 1 frame per second and scale it on the fly
+        .arg("-vf")
+        .arg(format!("fps=1,scale={}:{}", width, height))
+        // Force output to be raw, uncompressed bytes (no JPEG overhead)
+        .arg("-f")
+        .arg("image2pipe")
+        .arg("-pix_fmt")
+        .arg("rgb24")
+        .arg("-vcodec")
+        .arg("rawvideo")
+        // Stream directly to stdout instead of a file
+        .arg("-")
+        .arg("-hide_banner")
+        .arg("-loglevel")
+        .arg("error")
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to start FFmpeg: {}", e))?;
 
-    // Sort alphabetically so frame_0001 comes before frame_0002
-    entries.sort_by_key(|e| e.path());
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or("Failed to capture FFmpeg output")?;
 
-    for (index, entry) in entries.iter().enumerate() {
-        let image_path = entry.path();
+    let mut buffer = vec![0; (width * height * 3) as usize]; // RGB24 means 3 bytes per pixel
+    let mut frame_count = 0;
 
-        let timestamp_seconds = index;
+    loop {
+        match stdout.read_exact(&mut buffer) {
+            Ok(_) => {
+                let embeddings = engine
+                    .get_image_embedding(buffer.clone())
+                    .map_err(|e| format!("Failed to get image embedding: {}", e))?;
+                let frame = Frame {
+                    video_id: video.id.clone(),
+                    timestamp: frame_count as f64,
+                    vector: Some(embeddings),
+                    confidence: None,
+                };
 
-        let embeddings = engine
-            .get_image_embedding(image_path.to_str().as_ref().unwrap())
-            .map_err(|e| format!("Failed to get image embedding: {}", e))?;
-
-        let frame = Frame {
-            video_id: video.id.clone(),
-            timestamp: timestamp_seconds as f64,
-            vector: Some(embeddings),
-            confidence: None,
-        };
-
-        database::operations::create_frames(connection, frame).await;
+                database::operations::create_frames(connection, frame).await;
+                println!("Indexed frame {}", frame_count);
+                frame_count += 1;
+            }
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                    break; // End of stream, we're done
+                } else {
+                    return Err(format!("Error reading FFmpeg output: {}", e));
+                }
+            }
+        }
     }
-    println!("Indexed {} frames for video {}", entries.len(), video.name);
+
+    println!("Indexed {} frames for video {}", frame_count, video.name);
     database::operations::update_video_status(
         connection,
         video.id.clone(),

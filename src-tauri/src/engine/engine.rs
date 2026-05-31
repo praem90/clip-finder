@@ -16,6 +16,7 @@ impl ClipEngine {
     pub fn new() -> Self {
         let device = get_best_device().unwrap().clone();
         let (model, tokenizer) = get_model(&device);
+
         ClipEngine {
             model,
             tokenizer,
@@ -41,19 +42,8 @@ impl ClipEngine {
             .unwrap());
     }
 
-    pub fn get_image_embedding(&self, path: &str) -> Result<Vec<f32>, String> {
+    pub fn get_image_embedding(&self, img: Vec<u8>) -> Result<Vec<f32>, String> {
         let config = ClipVisionConfig::vit_base_patch32();
-        let img = image::ImageReader::open(path)
-            .map_err(|e| format!("Failed to open image: {:?}", e))?
-            .decode()
-            .unwrap()
-            .resize_to_fill(
-                config.image_size.try_into().unwrap(),
-                config.image_size.try_into().unwrap(),
-                image::imageops::FilterType::Triangle,
-            )
-            .to_rgb8()
-            .into_raw();
 
         let img = Tensor::from_vec(
             img,
