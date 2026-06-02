@@ -74,12 +74,3 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      - name: Upload Installer as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Clipfinder-Windows-Beta # This is what the downloaded ZIP will be named
-          path: |
-            ./msi/*.msi
-            ./nsis/*.exe
-            ./dmg/*.dmg
-
