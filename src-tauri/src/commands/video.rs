@@ -158,6 +158,26 @@ pub async fn get_frame_image(
 }
 
 #[tauri::command]
+pub async fn get_tags(connection: State<'_, Connection>) -> Result<Vec<String>, String> {
+    operations::get_all_tags(&connection).await
+}
+
+#[tauri::command]
+pub async fn update_video_tags(
+    video_id: String,
+    tags: Vec<String>,
+    connection: State<'_, Connection>,
+) -> Result<Response, String> {
+    let video = operations::update_video_tags(&connection, video_id, tags).await?;
+
+    Ok(Response {
+        success: true,
+        results: vec![video],
+        error: None,
+    })
+}
+
+#[tauri::command]
 pub async fn delete_video(
     video_id: String,
     connection: State<'_, Connection>,

@@ -34,6 +34,14 @@ export const reIndexVideo = async (videoId: string): Promise<void> => {
   return invoke("reindex_video", { videoId });
 };
 
+export const updateVideoTags = async (videoId: string, tags: string[]): Promise<void> => {
+  return invoke("update_video_tags", { videoId, tags });
+};
+
+export const getTags = async (): Promise<string[]> => {
+  return invoke<string[]>("get_tags");
+};
+
 export const getFrameThumbnail = async (videoPath: string, timestamp: number): Promise<ArrayBuffer> => {
   return invoke("get_frame_image", { videoPath, timestamp });
 }

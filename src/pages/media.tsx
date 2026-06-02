@@ -1,8 +1,9 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Video, Status } from "@/types/video";
-import { getVideos } from "@/services/api";
+import { getVideos, getTags } from "@/services/api";
 import { useEffect, useMemo, useState } from "react";
-import { deleteVideo, indexVideo, reIndexVideo } from "../services/api";
+import { deleteVideo, indexVideo, reIndexVideo, updateVideoTags } from "../services/api";
+import { TagEditor } from "#components/tag-editor";
 import IndexStatus from "#components/index-status";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,11 @@ export function Media() {
         videos.some((v: Video) => v.status === Status.PENDING || v.status === Status.PROCESSING);
       return busy ? 1200 : false;
     },
+  });
+
+  const { data: allTags } = useQuery({
+    queryKey: ['tags'],
+    queryFn: getTags,
   });
 
   const queryClient = useQueryClient()
@@ -167,7 +173,7 @@ export function Media() {
           <EmptyState onAdd={pickFiles} />
         ) : (
           <>
-            <MediaTable videos={videos} startIndex={(page - 1) * PAGE_SIZE} />
+            <MediaTable videos={videos} startIndex={(page - 1) * PAGE_SIZE} allTags={allTags ?? []} />
             {totalPages > 1 && (
               <div className="flex items-center justify-between gap-4 px-8 pb-8">
                 <span className="mono-label">
@@ -229,7 +235,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-function MediaTable({ videos, startIndex = 0 }: { videos: Video[]; startIndex?: number }) {
+function MediaTable({ videos, startIndex = 0, allTags = [] }: { videos: Video[]; startIndex?: number; allTags?: string[] }) {
   return (
     <div className="px-8 py-5">
       <div className="overflow-hidden rounded-sm border border-white/6">
@@ -241,12 +247,13 @@ function MediaTable({ videos, startIndex = 0 }: { videos: Video[]; startIndex?: 
               <th className="mono-label px-3 py-2.5 text-left">Path</th>
               <th className="mono-label px-3 py-2.5 text-left whitespace-nowrap">Last Indexed</th>
               <th className="mono-label px-3 py-2.5 text-left">Status</th>
+              <th className="mono-label px-3 py-2.5 text-left">Tags</th>
               <th className="mono-label px-3 py-2.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {videos.map((video, idx) => (
-              <MediaRow key={video.id} video={video} idx={startIndex + idx + 1} />
+              <MediaRow key={video.id} video={video} idx={startIndex + idx + 1} allTags={allTags} />
             ))}
           </tbody>
         </table>
@@ -255,11 +262,24 @@ function MediaTable({ videos, startIndex = 0 }: { videos: Video[]; startIndex?: 
   );
 }
 
-function MediaRow({ video, idx }: { video: Video; idx: number }) {
+function MediaRow({ video, idx, allTags = [] }: { video: Video; idx: number; allTags?: string[] }) {
   const [deleting, setDeleting] = useState(false);
   const [reIndexing, setReIndexing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [savingTags, setSavingTags] = useState(false);
   const queryClient = useQueryClient()
+
+  const handleTagsChange = (tags: string[]) => {
+    setSavingTags(true);
+    updateVideoTags(video.id, tags).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['videos'] });
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
+    }).catch((err) => {
+      toast.error(`Failed to update tags: ${err.message ?? err}`);
+    }).finally(() => {
+      setSavingTags(false);
+    });
+  };
 
   const reIndex = () => {
     setReIndexing(true);
@@ -308,6 +328,9 @@ function MediaRow({ video, idx }: { video: Video; idx: number }) {
         {indexed.toLocaleDateString()} · {indexed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </td>
       <td className="px-3 py-3"><IndexStatus status={video.status} /></td>
+      <td className="max-w-[260px] px-3 py-3">
+        <TagEditor tags={video.tags ?? []} allTags={allTags} onChange={handleTagsChange} busy={savingTags} />
+      </td>
       <td className="px-3 py-3">
         <div className="flex justify-end gap-1.5">
           <button

@@ -3,6 +3,7 @@ export interface Video {
 	name: string;
 	path: string;
 	status: Status;
+	tags: string[];
 	last_indexed_at: string;
 }
 
