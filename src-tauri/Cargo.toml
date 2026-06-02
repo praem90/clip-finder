@@ -44,11 +44,6 @@ candle-core = { git = "https://github.com/huggingface/candle.git", version="0.10
 candle-nn = {  git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["metal"] }
 candle-transformers = {  git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["metal"] }
 
-[target.'cfg(target_os = "windows")'.dependencies]
-candle-core = { git = "https://github.com/huggingface/candle.git", version="0.10.2", features = ["cuda"] }
-candle-nn = {  git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["cuda"] }
-candle-transformers = {  git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["cuda"] }
-
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 
