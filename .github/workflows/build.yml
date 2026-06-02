@@ -52,11 +52,11 @@ jobs:
           # choco install protoc cuda -y
           mkdir -p src-tauri/bin
           echo "Dowloading ffmpeg for windows..."
-          curl -L -o ffmpeg.7z https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z
+          curl -L -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
           ls
-          tar -xf ./ffmpeg.7z
+          unzip -q ffmpeg.zip
           mv ffmpeg-*/bin/ffmpeg.exe src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe
-          rm -rf ./ffmpeg.7z ./ffmpeg-*
+          rm -rf ./ffmpeg.zip ./ffmpeg-*
           echo "FFmpeg downloaded and moved to src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe"
 
 
