@@ -16,8 +16,8 @@ jobs:
         include:
           - platform: 'macos-latest' # for Arm based macs (M1 and above).
             args: '--target aarch64-apple-darwin'
-          - platform: 'ubuntu-22.04'
-            args: ''
+          # - platform: 'ubuntu-22.04'
+          #   args: ''
           - platform: 'windows-latest'
             args: ''
 
@@ -36,11 +36,28 @@ jobs:
         if: matrix.platform == 'macos-latest' # This must match the platform value defined above.
         run: |
           brew install protobuf
+          mkdir -p src-tauri/bin
+          echo "Dowloading ffmpeg for MacOS..."
+          curl -L -o ffmpeg.zip https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip
+          unzip -q ffmpeg.zip
+          mv ffmpeg src-tauri/bin/ffmpeg-aarch64-apple-darwin
+          rm -rf ffmpeg.zip 
+          echo "FFmpeg downloaded and moved to src-tauri/bin/ffmpeg-aarch64-apple-darwin"
 
-      # - name: install dependencies (Windows only)
-      #   if: matrix.platform == 'windows-latest' # This must match the platform value defined above.
-      #   run: |
-      #     choco install protoc cuda -y
+
+      - name: install dependencies (Windows only)
+        if: matrix.platform == 'windows-latest' # This must match the platform value defined above.
+        shell: bash
+        run: |
+          choco install protoc cuda -y
+          mkdir -p src-tauri/bin
+          echo "Dowloading ffmpeg for windows..."
+          curl -L -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z
+          unzip -q ffmpeg.zip
+          mv ffmpeg-*/bin/ffmpeg.exe src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe
+          rm -rf ffmpeg.zip ffmpeg-*
+          echo "FFmpeg downloaded and moved to src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe"
+
 
       - name: setup node
         uses: actions/setup-node@v4

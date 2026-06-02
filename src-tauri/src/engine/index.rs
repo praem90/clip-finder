@@ -1,5 +1,6 @@
 use lancedb::Connection;
 use std::io::Read;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use crate::database;
@@ -11,28 +12,19 @@ pub async fn extract_single_frame(
     timestamp_seconds: f64,
     output_path: &str,
 ) -> Result<(), String> {
-    let status = Command::new("ffmpeg")
-        // 1. CRITICAL: -ss BEFORE -i makes the seek instantaneous
+    let ffmpeg_path = get_ffmpeg_path();
+    let status = Command::new(ffmpeg_path)
         .arg("-ss")
         .arg(timestamp_seconds.to_string())
-        // 2. Specify the input video
         .arg("-i")
         .arg(video_path)
-        // 3. Tell FFmpeg to stop after grabbing exactly 1 frame
         .arg("-vframes")
         .arg("1")
-        // 4. Set high JPEG quality (2 is excellent, 31 is worst)
-        // .arg("-q:v")
-        // .arg("2")
-        // 5. Overwrite the output file if it already exists
         .arg("-y")
-        // 6. Suppress unnecessary terminal output
         .arg("-hide_banner")
         .arg("-loglevel")
         .arg("error")
-        // 7. Define the target destination
         .arg(output_path)
-        // Execute the process
         .status()
         .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
 
@@ -135,4 +127,25 @@ pub async fn index_video(
 
     // When the function ends, `temp_dir` goes out of scope and the OS deletes all the JPEGs automatically!
     Ok(())
+}
+
+fn get_ffmpeg_path() -> PathBuf {
+    let current_exe_result = std::env::current_exe();
+
+    if current_exe_result.is_err() {
+        // If we can't get the current executable path, fall back to just "ffmpeg" and hope it's in the PATH
+        return PathBuf::from("ffmpeg");
+    }
+
+    let mut path = current_exe_result.unwrap();
+
+    path.pop(); // Remove the executable name
+
+    #[cfg(target_os = "windows")]
+    path.push("ffmpeg.exe");
+
+    #[cfg(not(target_os = "windows"))]
+    path.push("ffmpeg");
+
+    return path;
 }
