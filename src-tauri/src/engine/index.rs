@@ -53,7 +53,8 @@ pub async fn index_video(
     let width = 224; // CLIP's required width
     let height = 224; // CLIP's required height
 
-    let mut child = Command::new("ffmpeg")
+    let ffmpeg_path = get_ffmpeg_path();
+    let mut child = Command::new(ffmpeg_path)
         .arg("-i")
         .arg(video.path.as_str())
         // Extract 1 frame per second and scale it on the fly
