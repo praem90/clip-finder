@@ -72,3 +72,4 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+          uploadWorkflowArtifacts: true
