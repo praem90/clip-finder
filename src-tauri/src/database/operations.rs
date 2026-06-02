@@ -13,11 +13,17 @@ use lancedb::Connection;
 
 use crate::database::models::{Frame, Video};
 
-pub async fn get_videos(connection: &Connection) -> Result<Vec<Video>, String> {
+pub async fn get_videos(
+    connection: &Connection,
+    limit: usize,
+    offset: usize,
+) -> Result<(Vec<Video>, usize), String> {
     let table = connection.open_table("videos").execute().await.unwrap();
+    let total = table.count_rows(None).await.unwrap();
     let batches = table
         .query()
-        .limit(100)
+        .limit(limit)
+        .offset(offset)
         .execute()
         .await
         .unwrap()
@@ -31,7 +37,7 @@ pub async fn get_videos(connection: &Connection) -> Result<Vec<Video>, String> {
         .flatten()
         .collect::<Vec<Video>>();
 
-    Ok(videos)
+    Ok((videos, total))
 }
 
 pub async fn get_video_by_id(
@@ -122,6 +128,78 @@ pub async fn create_frames(connection: &Connection, frame: Frame) {
     let batches =
         RecordBatchIterator::new(vec![Ok(record_batch)], frames_table.schema().await.unwrap());
     frames_table.add(batches).execute().await.unwrap();
+}
+
+pub async fn get_all_tags(connection: &Connection) -> Result<Vec<String>, String> {
+    let table = connection.open_table("videos").execute().await.unwrap();
+    let batches = table
+        .query()
+        .select(lancedb::query::Select::Columns(vec!["tags".to_string()]))
+        .limit(100_000)
+        .execute()
+        .await
+        .unwrap()
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap();
+
+    let mut set = std::collections::BTreeSet::new();
+    for batch in &batches {
+        let tags_col = batch
+            .column_by_name("tags")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<ListArray>()
+            .unwrap();
+        for i in 0..batch.num_rows() {
+            if tags_col.is_null(i) {
+                continue;
+            }
+            let list = tags_col.value(i);
+            let strings = list
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .expect("Failed to downcast tags list to StringArray");
+            for value in strings.iter().flatten() {
+                set.insert(value.to_string());
+            }
+        }
+    }
+
+    Ok(set.into_iter().collect())
+}
+
+pub async fn update_video_tags(
+    connection: &Connection,
+    video_id: String,
+    tags: Vec<String>,
+) -> Result<Video, String> {
+    let videos_table = connection.open_table("videos").execute().await.unwrap();
+
+    // Update the list column in place so the row keeps its position (avoids a
+    // delete + re-add, which would bounce the video to the end of the table).
+    let expr = if tags.is_empty() {
+        "NULL".to_string()
+    } else {
+        let items = tags
+            .iter()
+            .map(|t| format!("'{}'", t.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("make_array({})", items)
+    };
+
+    videos_table
+        .update()
+        .only_if(format!("id = '{}'", video_id.replace('\'', "''")))
+        .column("tags", expr)
+        .execute()
+        .await
+        .map_err(|e| format!("Failed to update tags: {}", e))?;
+
+    get_video_by_id(connection, video_id)
+        .await?
+        .ok_or_else(|| "Video not found".to_string())
 }
 
 pub async fn update_video_status(

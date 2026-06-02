@@ -58,6 +58,8 @@ pub fn run() {
             video::get_frame_image,
             video::delete_video,
             video::reindex_video,
+            video::update_video_tags,
+            video::get_tags,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

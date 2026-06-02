@@ -11,9 +11,27 @@ import {
 } from "#components/ui/sidebar"
 import { Library, Search } from "lucide-react"
 import { useNavigation, Page } from "@/contexts/NavigationContext";
+import { useEffect } from "react";
 
 export function AppSidebar() {
 	const { activePage, setActivePage } = useNavigation();
+
+	useEffect(() => {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) {
+				return;
+			}
+			if (event.key === "1") {
+				event.preventDefault();
+				setActivePage(Page.Search);
+			} else if (event.key === "2") {
+				event.preventDefault();
+				setActivePage(Page.Library);
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [setActivePage]);
 	return (
 		<Sidebar collapsible="icon" className="hairline-r">
 			<SidebarHeader className="px-3 pt-5 pb-4">

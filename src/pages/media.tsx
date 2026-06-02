@@ -1,23 +1,53 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Video, Status } from "@/types/video";
-import { getVideos } from "@/services/api";
+import { getVideos, getTags } from "@/services/api";
 import { useEffect, useMemo, useState } from "react";
-import { deleteVideo, indexVideo, reIndexVideo } from "../services/api";
+import { deleteVideo, indexVideo, reIndexVideo, updateVideoTags } from "../services/api";
+import { TagEditor } from "#components/tag-editor";
 import IndexStatus from "#components/index-status";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Plus, RefreshCw, Trash2, FileVideo, Inbox } from "lucide-react";
 import { Spinner } from "#components/ui/spinner";
 import { open } from '@tauri-apps/plugin-dialog';
+import { ConfirmDialog } from "#components/ui/confirm-dialog";
+import { Pagination } from "#components/ui/pagination";
+
+const PAGE_SIZE = 15;
 
 export function Media() {
+  const [indexingCount, setIndexingCount] = useState(0);
+  const [page, setPage] = useState(1);
+
   const { isPending, isError, data, error } = useQuery({
-    queryKey: ['videos'],
-    queryFn: getVideos,
+    queryKey: ['videos', page],
+    queryFn: () => getVideos({ page, pageSize: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
+    // While an upload is in flight or any video is still working, poll so the
+    // list (and its status) updates live without needing a tab switch.
+    refetchInterval: (query): number | false => {
+      const videos = query.state.data?.results ?? [];
+      const busy =
+        indexingCount > 0 ||
+        videos.some((v: Video) => v.status === Status.PENDING || v.status === Status.PROCESSING);
+      return busy ? 1200 : false;
+    },
+  });
+
+  const { data: allTags } = useQuery({
+    queryKey: ['tags'],
+    queryFn: getTags,
   });
 
   const queryClient = useQueryClient()
   const [isDragging, setIsDragging] = useState(false);
+
+  const totalPages = data?.total_pages ?? 1;
+
+  // If deletions shrink the list past the current page, step back.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const pickFiles = async () => {
     const files = await open({
@@ -47,12 +77,21 @@ export function Media() {
         return;
       }
 
+      setIndexingCount((c) => c + 1);
+      // Persistent toast shown the moment the file is added; it stays up while
+      // indexing runs, then resolves in place to success/error.
+      const toastId = toast.loading('Video added to queue for indexing…');
+      // Refetch right away so the row the backend creates up front (status
+      // "pending") shows in the library immediately, not only once indexing ends.
+      queryClient.invalidateQueries({ queryKey: ['videos'] });
+
       try {
         await indexVideo({ path: e.detail });
-        toast.success('Video indexed successfully!');
+        toast.success('Video indexed successfully!', { id: toastId });
       } catch (err: any) {
-        toast.error(`Failed to index video: ${err.message}`);
+        toast.error(`Failed to index video: ${err.message}`, { id: toastId });
       } finally {
+        setIndexingCount((c) => Math.max(0, c - 1));
         queryClient.invalidateQueries({ queryKey: ['videos'] });
       }
     };
@@ -80,15 +119,17 @@ export function Media() {
   }, []);
 
   const videos = data?.results ?? [];
+  const total = data?.total ?? 0;
   const stats = useMemo(() => {
-    const counts = { total: videos.length, indexed: 0, processing: 0, pending: 0 };
+    // total reflects the whole library; indexed/processing reflect this page.
+    const counts = { total, indexed: 0, processing: 0, pending: 0 };
     videos.forEach((v: Video) => {
       if (v.status === Status.COMPLETED) counts.indexed++;
       else if (v.status === Status.PROCESSING) counts.processing++;
       else counts.pending++;
     });
     return counts;
-  }, [videos]);
+  }, [videos, total]);
 
   return (
     <div className="relative flex h-full flex-col">
@@ -131,7 +172,17 @@ export function Media() {
         ) : videos.length === 0 ? (
           <EmptyState onAdd={pickFiles} />
         ) : (
-          <MediaTable videos={videos} />
+          <>
+            <MediaTable videos={videos} startIndex={(page - 1) * PAGE_SIZE} allTags={allTags ?? []} />
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between gap-4 px-8 pb-8">
+                <span className="mono-label">
+                  page {page} / {totalPages} · {total} total
+                </span>
+                <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -184,7 +235,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-function MediaTable({ videos }: { videos: Video[] }) {
+function MediaTable({ videos, startIndex = 0, allTags = [] }: { videos: Video[]; startIndex?: number; allTags?: string[] }) {
   return (
     <div className="px-8 py-5">
       <div className="overflow-hidden rounded-sm border border-white/6">
@@ -196,12 +247,13 @@ function MediaTable({ videos }: { videos: Video[] }) {
               <th className="mono-label px-3 py-2.5 text-left">Path</th>
               <th className="mono-label px-3 py-2.5 text-left whitespace-nowrap">Last Indexed</th>
               <th className="mono-label px-3 py-2.5 text-left">Status</th>
+              <th className="mono-label px-3 py-2.5 text-left">Tags</th>
               <th className="mono-label px-3 py-2.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {videos.map((video, idx) => (
-              <MediaRow key={video.id} video={video} idx={idx + 1} />
+              <MediaRow key={video.id} video={video} idx={startIndex + idx + 1} allTags={allTags} />
             ))}
           </tbody>
         </table>
@@ -210,10 +262,24 @@ function MediaTable({ videos }: { videos: Video[] }) {
   );
 }
 
-function MediaRow({ video, idx }: { video: Video; idx: number }) {
+function MediaRow({ video, idx, allTags = [] }: { video: Video; idx: number; allTags?: string[] }) {
   const [deleting, setDeleting] = useState(false);
   const [reIndexing, setReIndexing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [savingTags, setSavingTags] = useState(false);
   const queryClient = useQueryClient()
+
+  const handleTagsChange = (tags: string[]) => {
+    setSavingTags(true);
+    updateVideoTags(video.id, tags).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['videos'] });
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
+    }).catch((err) => {
+      toast.error(`Failed to update tags: ${err.message ?? err}`);
+    }).finally(() => {
+      setSavingTags(false);
+    });
+  };
 
   const reIndex = () => {
     setReIndexing(true);
@@ -262,6 +328,9 @@ function MediaRow({ video, idx }: { video: Video; idx: number }) {
         {indexed.toLocaleDateString()} · {indexed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </td>
       <td className="px-3 py-3"><IndexStatus status={video.status} /></td>
+      <td className="max-w-[260px] px-3 py-3">
+        <TagEditor tags={video.tags ?? []} allTags={allTags} onChange={handleTagsChange} busy={savingTags} />
+      </td>
       <td className="px-3 py-3">
         <div className="flex justify-end gap-1.5">
           <button
@@ -272,7 +341,7 @@ function MediaRow({ video, idx }: { video: Video; idx: number }) {
             {reIndexing ? <Spinner /> : <RefreshCw className="size-3.5" />}
           </button>
           <button
-            onClick={handleDelete}
+            onClick={() => setConfirmOpen(true)}
             disabled={deleting}
             title="Delete"
             className="grid size-7 place-items-center rounded-sm border border-white/8 text-muted-foreground transition-colors hover:border-rose-400/60 hover:bg-rose-500/[0.06] hover:text-rose-200 disabled:opacity-50"
@@ -281,6 +350,21 @@ function MediaRow({ video, idx }: { video: Video; idx: number }) {
           </button>
         </div>
       </td>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={handleDelete}
+        title="Delete video"
+        description={
+          <>
+            Remove <span className="font-mono text-foreground">{fileName}</span> from the library? This deletes its index and cannot be undone.
+          </>
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        tone="danger"
+      />
     </tr>
   );
 }

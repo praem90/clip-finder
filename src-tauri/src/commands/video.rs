@@ -13,6 +13,17 @@ pub struct Response {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PaginatedResponse {
+    success: bool,
+    results: Vec<Video>,
+    page: usize,
+    page_size: usize,
+    total: usize,
+    total_pages: usize,
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FrameResult {
     video: Video,
     frame: Frame,
@@ -27,12 +38,25 @@ pub struct FrameResponse {
 }
 
 #[tauri::command]
-pub async fn get_videos(connection: State<'_, Connection>) -> Result<Response, String> {
-    let videos = operations::get_videos(&connection).await?;
+pub async fn get_videos(
+    page: Option<usize>,
+    page_size: Option<usize>,
+    connection: State<'_, Connection>,
+) -> Result<PaginatedResponse, String> {
+    let page = page.unwrap_or(1).max(1);
+    let page_size = page_size.unwrap_or(15).clamp(1, 100);
+    let offset = (page - 1) * page_size;
 
-    let response = Response {
+    let (videos, total) = operations::get_videos(&connection, page_size, offset).await?;
+    let total_pages = total.div_ceil(page_size).max(1);
+
+    let response = PaginatedResponse {
         success: true,
         results: videos,
+        page,
+        page_size,
+        total,
+        total_pages,
         error: None,
     };
 
@@ -131,6 +155,26 @@ pub async fn get_frame_image(
 
     let data = std::fs::read(frame_path).map_err(|e| format!("Failed to read frame image: {}", e));
     Ok(tauri::ipc::Response::new(data.unwrap()))
+}
+
+#[tauri::command]
+pub async fn get_tags(connection: State<'_, Connection>) -> Result<Vec<String>, String> {
+    operations::get_all_tags(&connection).await
+}
+
+#[tauri::command]
+pub async fn update_video_tags(
+    video_id: String,
+    tags: Vec<String>,
+    connection: State<'_, Connection>,
+) -> Result<Response, String> {
+    let video = operations::update_video_tags(&connection, video_id, tags).await?;
+
+    Ok(Response {
+        success: true,
+        results: vec![video],
+        error: None,
+    })
 }
 
 #[tauri::command]
