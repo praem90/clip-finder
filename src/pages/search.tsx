@@ -47,14 +47,14 @@ export function Search() {
         <div className="mt-5">
           <div className="group flex items-center gap-3 border-b border-white/10 pb-2 transition-colors focus-within:border-amber-400/70">
             <span className="font-mono text-[11px] tracking-[0.2em] text-amber-400">QUERY ▸</span>
+            {!hasQuery && <span className="caret-blink h-4 w-px shrink-0 bg-foreground" aria-hidden />}
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="describe a scene, object, or moment…"
               autoFocus
-              className="h-9 flex-1 rounded-none border-0 bg-transparent px-0 font-mono text-[15px] tracking-tight shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0 focus-visible:outline-none"
+              className={`h-9 flex-1 rounded-none border-0 bg-transparent px-0 font-mono text-[15px] tracking-tight shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0 focus-visible:outline-none ${!hasQuery ? "caret-transparent" : ""}`}
             />
-            {!hasQuery && <span className="caret-blink h-4 w-px bg-foreground" aria-hidden />}
             {hasQuery && (
               <button
                 onClick={() => setQuery("")}

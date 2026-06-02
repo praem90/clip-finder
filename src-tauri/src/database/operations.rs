@@ -13,11 +13,17 @@ use lancedb::Connection;
 
 use crate::database::models::{Frame, Video};
 
-pub async fn get_videos(connection: &Connection) -> Result<Vec<Video>, String> {
+pub async fn get_videos(
+    connection: &Connection,
+    limit: usize,
+    offset: usize,
+) -> Result<(Vec<Video>, usize), String> {
     let table = connection.open_table("videos").execute().await.unwrap();
+    let total = table.count_rows(None).await.unwrap();
     let batches = table
         .query()
-        .limit(100)
+        .limit(limit)
+        .offset(offset)
         .execute()
         .await
         .unwrap()
@@ -31,7 +37,7 @@ pub async fn get_videos(connection: &Connection) -> Result<Vec<Video>, String> {
         .flatten()
         .collect::<Vec<Video>>();
 
-    Ok(videos)
+    Ok((videos, total))
 }
 
 pub async fn get_video_by_id(
