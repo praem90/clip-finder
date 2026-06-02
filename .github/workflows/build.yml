@@ -14,8 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest' # for Arm based macs (M1 and above).
-            args: '--target aarch64-apple-darwin'
+          # - platform: 'macos-latest' # for Arm based macs (M1 and above).
+          #   args: '--target aarch64-apple-darwin'
           # - platform: 'ubuntu-22.04'
           #   args: ''
           - platform: 'windows-latest'
@@ -52,10 +52,11 @@ jobs:
           # choco install protoc cuda -y
           mkdir -p src-tauri/bin
           echo "Dowloading ffmpeg for windows..."
-          curl -L -o ffmpeg.7z https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
-          unzip ffmpeg.zip
+          curl -L -o ffmpeg.7z https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z
+          ls
+          tar -xf ./ffmpeg.7z
           mv ffmpeg-*/bin/ffmpeg.exe src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe
-          rm -rf ffmpeg.zip ffmpeg-*
+          rm -rf ./ffmpeg.7z ./ffmpeg-*
           echo "FFmpeg downloaded and moved to src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe"
 
 
