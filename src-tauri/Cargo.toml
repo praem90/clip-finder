@@ -44,6 +44,11 @@ candle-core = { git = "https://github.com/huggingface/candle.git", version="0.10
 candle-nn = {  git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["metal"] }
 candle-transformers = {  git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["metal"] }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+candle-core = { git = "https://github.com/huggingface/candle.git", version="0.10.2", features = ["cuda"] }
+candle-nn = {  git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["cuda"] }
+candle-transformers = {  git = "https://github.com/huggingface/candle.git", version = "0.10.2", features = ["cuda"] }
+
 [profile.release]
 codegen-units = 1 # Allows LLVM to perform better optimization.
 lto = true # Enables link-time-optimizations.

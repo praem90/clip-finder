@@ -77,7 +77,9 @@ jobs:
       - name: Upload Installer as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Clipfinder-Beta # This is what the downloaded ZIP will be named
-          path: ${{ join(fromJSON(steps.tauri_build.outputs.artifactPaths), '\n') }}
-          if-no-files-found: error
+          name: Clipfinder-Windows-Beta # This is what the downloaded ZIP will be named
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/dmg/*.dmg
 
