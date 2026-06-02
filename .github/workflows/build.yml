@@ -14,10 +14,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest' # for Arm based macs (M1 and above).
-            args: '--target aarch64-apple-darwin'
-          - platform: 'ubuntu-22.04'
-            args: ''
           - platform: 'windows-latest'
             args: ''
 
@@ -40,7 +36,7 @@ jobs:
       - name: install dependencies (Windows only)
         if: matrix.platform == 'windows-latest' # This must match the platform value defined above.
         run: |
-          choco install protoc -y
+          choco install protoc cuda -y
 
       - name: setup node
         uses: actions/setup-node@v4
