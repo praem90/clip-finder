@@ -13,21 +13,25 @@ pub struct ClipEngine {
 }
 
 impl ClipEngine {
-    pub fn new() -> Self {
-        let device = get_best_device().unwrap().clone();
-        let (model, tokenizer) = get_model(&device);
+    pub fn new() -> Result<Self, String> {
+        let device =
+            get_best_device().map_err(|e| format!("Failed to select compute device: {}", e))?;
+        let (model, tokenizer) = get_model(&device)?;
 
-        ClipEngine {
+        Ok(ClipEngine {
             model,
             tokenizer,
             device,
-        }
+        })
     }
 
     pub fn get_text_embedding(&self, text: String) -> Result<Vec<f32>, String> {
         let mut tokens = vec![];
 
-        let encoding = self.tokenizer.encode(text, true).unwrap();
+        let encoding = self
+            .tokenizer
+            .encode(text, true)
+            .map_err(|e| format!("Failed to tokenize query: {}", e))?;
 
         tokens.push(encoding.get_ids().to_vec());
         let text_features = self
@@ -71,25 +75,32 @@ impl ClipEngine {
     }
 }
 
-fn get_model(device: &Device) -> (ClipModel, Tokenizer) {
+fn get_model(device: &Device) -> Result<(ClipModel, Tokenizer), String> {
     let model_id = "sentence-transformers/clip-ViT-B-32";
     let repo = Repo::with_revision(model_id.to_string(), RepoType::Model, "main".to_string());
-    let api = Api::new().unwrap();
+    let api = Api::new().map_err(|e| format!("Failed to initialize Hugging Face API: {}", e))?;
 
     let repo = api.repo(repo);
-    let path = repo.get("0_CLIPModel/model.safetensors").unwrap();
+    let path = repo
+        .get("0_CLIPModel/model.safetensors")
+        .map_err(|e| format!("Failed to fetch model weights: {}", e))?;
 
     let openai_repo = api.model("openai/clip-vit-base-patch32".to_string());
-    let tokenizer_path = openai_repo.get("tokenizer.json").unwrap();
+    let tokenizer_path = openai_repo
+        .get("tokenizer.json")
+        .map_err(|e| format!("Failed to fetch tokenizer: {}", e))?;
 
     let vb = unsafe {
         VarBuilder::from_mmaped_safetensors(&[&path], DType::F32, device)
-            .unwrap_or_else(|e| panic!("Failed to load safetensors: {:?}", e))
+            .map_err(|e| format!("Failed to load safetensors: {:?}", e))?
     };
-    let tokenizer = Tokenizer::from_file(tokenizer_path).unwrap();
+    let tokenizer =
+        Tokenizer::from_file(tokenizer_path).map_err(|e| format!("Failed to load tokenizer: {}", e))?;
 
     let config = ClipConfig::vit_base_patch32();
-    return (ClipModel::new(vb, &config).unwrap(), tokenizer);
+    let model =
+        ClipModel::new(vb, &config).map_err(|e| format!("Failed to build CLIP model: {}", e))?;
+    Ok((model, tokenizer))
 }
 
 fn get_best_device() -> candle_core::Result<Device> {

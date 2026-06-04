@@ -3,7 +3,8 @@ export interface Video {
 	name: string;
 	path: string;
 	status: Status;
-	last_indexed_at: string;
+	last_indexed_at?: string;
+	created_at?: string;
 }
 
 export enum Status {
@@ -14,7 +15,6 @@ export enum Status {
 }
 
 export interface SearchResult {
-	id: string;
 	video_id: string;
 	timestamp: number;
 	video: Video;

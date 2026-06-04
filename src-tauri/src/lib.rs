@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use futures::lock::Mutex;
@@ -12,12 +13,14 @@ use crate::database::connection;
 
 struct AppState {
     engine: Arc<Mutex<Option<engine::engine::ClipEngine>>>,
+    engine_ready: Arc<AtomicBool>,
 }
 
 impl AppState {
     fn new() -> Self {
         AppState {
             engine: Arc::new(Mutex::new(None)),
+            engine_ready: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -45,8 +48,19 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let app_state_clone = handle.state::<AppState>();
-                let mut engine_lock = app_state_clone.engine.lock().await;
-                *engine_lock = Some(engine::engine::ClipEngine::new());
+                match engine::engine::ClipEngine::new() {
+                    Ok(clip_engine) => {
+                        {
+                            let mut engine_lock = app_state_clone.engine.lock().await;
+                            *engine_lock = Some(clip_engine);
+                        }
+                        app_state_clone.engine_ready.store(true, Ordering::SeqCst);
+                        println!("✅ CLIP engine ready");
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to load CLIP engine: {}", e);
+                    }
+                }
             });
 
             Ok(())
@@ -58,6 +72,8 @@ pub fn run() {
             video::get_frame_image,
             video::delete_video,
             video::reindex_video,
+            video::is_engine_ready,
+            video::export_clip,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
