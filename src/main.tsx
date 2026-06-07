@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { listen, TauriEvent } from '@tauri-apps/api/event';
 import { Toaster } from "#components/ui/sonner";
 import { NavigationProvider } from "@/contexts/NavigationContext";
+import { EngineProvider } from "@/contexts/EngineContext";
 
 listen(TauriEvent.DRAG_DROP, (event: { payload: { paths: string[] } }) => {
   const filePaths = event.payload;
@@ -22,8 +23,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <QueryClientProvider client={new QueryClient()}>
       <NavigationProvider>
-        <App />
-        <Toaster />
+        <EngineProvider>
+          <App />
+          <Toaster />
+        </EngineProvider>
       </NavigationProvider>
     </QueryClientProvider>
   </React.StrictMode>,

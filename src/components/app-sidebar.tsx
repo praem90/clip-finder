@@ -11,9 +11,11 @@ import {
 } from "#components/ui/sidebar"
 import { Library, Search } from "lucide-react"
 import { useNavigation, Page } from "@/contexts/NavigationContext";
+import { useEngine } from "@/contexts/EngineContext";
 
-export function AppSidebar({ engineReady = false }: { engineReady?: boolean }) {
+export function AppSidebar() {
 	const { activePage, setActivePage } = useNavigation();
+	const { engineReady } = useEngine();
 	return (
 		<Sidebar collapsible="icon" className="hairline-r">
 			<SidebarHeader className="px-3 pt-5 pb-4">

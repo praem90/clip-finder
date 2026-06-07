@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use futures::lock::Mutex;
-use tauri::Manager;
+use tauri::{Emitter, Listener, Manager};
 
 mod commands;
 mod database;
@@ -13,6 +13,9 @@ use crate::database::connection;
 
 struct AppState {
     engine: Arc<Mutex<Option<engine::engine::ClipEngine>>>,
+    /// Mirrors whether `engine` is loaded, so we can answer "ready?" without
+    /// locking the engine. Replayed to late-mounting frontends via the
+    /// `frontend-ready` handshake.
     engine_ready: Arc<AtomicBool>,
 }
 
@@ -47,19 +50,38 @@ pub fn run() {
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let app_state_clone = handle.state::<AppState>();
+                let app_state = handle.state::<AppState>();
                 match engine::engine::ClipEngine::new() {
                     Ok(clip_engine) => {
                         {
-                            let mut engine_lock = app_state_clone.engine.lock().await;
+                            let mut engine_lock = app_state.engine.lock().await;
                             *engine_lock = Some(clip_engine);
                         }
-                        app_state_clone.engine_ready.store(true, Ordering::SeqCst);
+                        // The engine now lives in AppState; record readiness and
+                        // push it to the UI instead of having it poll a command.
+                        app_state.engine_ready.store(true, Ordering::SeqCst);
+                        let _ = handle.emit("engine-ready", true);
                         println!("✅ CLIP engine ready");
                     }
                     Err(e) => {
+                        let _ = handle.emit("engine-ready", false);
                         eprintln!("❌ Failed to load CLIP engine: {}", e);
                     }
+                }
+            });
+
+            // A fast (cached) engine load can finish before the webview has
+            // registered its `engine-ready` listener, and Tauri does not replay
+            // events to late listeners. When the frontend announces itself,
+            // replay the current readiness from AppState.
+            let ready_handle = app.handle().clone();
+            app.listen_any("frontend-ready", move |_| {
+                if ready_handle
+                    .state::<AppState>()
+                    .engine_ready
+                    .load(Ordering::SeqCst)
+                {
+                    let _ = ready_handle.emit("engine-ready", true);
                 }
             });
 
@@ -72,7 +94,6 @@ pub fn run() {
             video::get_frame_image,
             video::delete_video,
             video::reindex_video,
-            video::is_engine_ready,
             video::export_clip,
         ])
         .run(tauri::generate_context!())

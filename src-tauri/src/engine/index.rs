@@ -2,14 +2,16 @@ use lancedb::Connection;
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use tauri::{AppHandle, Emitter};
 
 use crate::database;
 use crate::database::models::{Frame, Video};
 use crate::engine::engine::ClipEngine;
 
+/// Per-frame indexing progress reported back to the caller. The engine layer
+/// is transport-agnostic; the command layer decides how to surface this
+/// (currently an `index-progress` Tauri event).
 #[derive(Clone, serde::Serialize)]
-struct IndexProgress {
+pub struct IndexProgress {
     video_id: String,
     processed: u64,
     total: u64,
@@ -48,7 +50,7 @@ pub async fn index_video(
     connection: &Connection,
     engine: &ClipEngine,
     video: &Video,
-    app_handle: &AppHandle,
+    on_progress: impl Fn(IndexProgress) + Send,
 ) -> Result<(), String> {
     println!("Extracting frames from {}", video.path);
     if video.status != "processing" {
@@ -115,14 +117,11 @@ pub async fn index_video(
                 database::operations::create_frames(connection, frame).await?;
                 frame_count += 1;
                 println!("Indexed frame {}", frame_count);
-                let _ = app_handle.emit(
-                    "index-progress",
-                    IndexProgress {
-                        video_id: video.id.clone(),
-                        processed: frame_count as u64,
-                        total,
-                    },
-                );
+                on_progress(IndexProgress {
+                    video_id: video.id.clone(),
+                    processed: frame_count as u64,
+                    total,
+                });
             }
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::UnexpectedEof {

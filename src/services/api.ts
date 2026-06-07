@@ -33,10 +33,6 @@ export const getFrameThumbnail = async (videoPath: string, timestamp: number): P
   return invoke("get_frame_image", { videoPath, timestamp });
 }
 
-export const isEngineReady = async (): Promise<boolean> => {
-  return invoke<boolean>("is_engine_ready");
-};
-
 export const exportClip = async (
   videoPath: string,
   timestamp: number,

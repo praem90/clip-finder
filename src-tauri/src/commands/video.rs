@@ -3,7 +3,7 @@ use crate::database::models::{Frame, Video};
 use crate::database::operations;
 use crate::engine;
 use chrono::Utc;
-use tauri::State;
+use tauri::{Emitter, State};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Response {
@@ -93,7 +93,11 @@ pub async fn index_video(
     let video = operations::create_video(&connection, video).await?;
     let engine_lock = app_state.engine.lock().await;
     let engine = engine_lock.as_ref().ok_or("Engine not loaded yet")?;
-    if let Err(e) = engine::index::index_video(&connection, &engine, &video, &app_handle).await {
+    if let Err(e) = engine::index::index_video(&connection, &engine, &video, move |p| {
+        let _ = app_handle.emit("index-progress", p);
+    })
+    .await
+    {
         let _ =
             operations::update_video_status(&connection, video.id.clone(), "failed".to_string())
                 .await;
@@ -166,7 +170,11 @@ pub async fn reindex_video(
     if let Some(video) = video {
         let engine_lock = app_state.engine.lock().await;
         let engine = engine_lock.as_ref().ok_or("Engine not loaded yet")?;
-        if let Err(e) = engine::index::index_video(&connection, &engine, &video, &app_handle).await {
+        if let Err(e) = engine::index::index_video(&connection, &engine, &video, move |p| {
+            let _ = app_handle.emit("index-progress", p);
+        })
+        .await
+        {
             let _ = operations::update_video_status(
                 &connection,
                 video.id.clone(),
@@ -180,13 +188,6 @@ pub async fn reindex_video(
     }
 
     return Ok(());
-}
-
-#[tauri::command]
-pub async fn is_engine_ready(app_state: State<'_, crate::AppState>) -> Result<bool, String> {
-    Ok(app_state
-        .engine_ready
-        .load(std::sync::atomic::Ordering::SeqCst))
 }
 
 /// Export a clip spanning `before_secs` before and `after_secs` after `timestamp`
