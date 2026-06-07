@@ -32,3 +32,13 @@ export const reIndexVideo = async (videoId: string): Promise<void> => {
 export const getFrameThumbnail = async (videoPath: string, timestamp: number): Promise<ArrayBuffer> => {
   return invoke("get_frame_image", { videoPath, timestamp });
 }
+
+export const exportClip = async (
+  videoPath: string,
+  timestamp: number,
+  beforeSecs: number,
+  afterSecs: number,
+  outputPath: string,
+): Promise<void> => {
+  return invoke("export_clip", { videoPath, timestamp, beforeSecs, afterSecs, outputPath });
+};

@@ -14,16 +14,20 @@ use lancedb::Connection;
 use crate::database::models::{Frame, Video};
 
 pub async fn get_videos(connection: &Connection) -> Result<Vec<Video>, String> {
-    let table = connection.open_table("videos").execute().await.unwrap();
+    let table = connection
+        .open_table("videos")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
     let batches = table
         .query()
         .limit(100)
         .execute()
         .await
-        .unwrap()
+        .map_err(|e| e.to_string())?
         .try_collect::<Vec<_>>()
         .await
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     let videos = batches
         .iter()
@@ -38,17 +42,21 @@ pub async fn get_video_by_id(
     connection: &Connection,
     video_id: String,
 ) -> Result<Option<Video>, String> {
-    let table = connection.open_table("videos").execute().await.unwrap();
+    let table = connection
+        .open_table("videos")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
     let batches = table
         .query()
         .only_if(format!("id = '{}'", video_id))
         .limit(1)
         .execute()
         .await
-        .unwrap()
+        .map_err(|e| e.to_string())?
         .try_collect::<Vec<_>>()
         .await
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     if batches.is_empty() {
         return Ok(None);
@@ -64,7 +72,11 @@ pub async fn get_video_by_id(
 }
 
 pub async fn create_video(connection: &Connection, video: Video) -> Result<Video, String> {
-    let table = connection.open_table("videos").execute().await.unwrap();
+    let table = connection
+        .open_table("videos")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
 
     let mut list_builder = ListBuilder::new(StringBuilder::new());
     for tag in &video.tags {
@@ -75,8 +87,9 @@ pub async fn create_video(connection: &Connection, video: Video) -> Result<Video
     }
     list_builder.append(true);
 
+    let schema = table.schema().await.map_err(|e| e.to_string())?;
     let record_batch = RecordBatch::try_new(
-        table.schema().await.unwrap(),
+        schema.clone(),
         vec![
             Arc::new(StringArray::from(vec![video.id.clone()])),
             Arc::new(StringArray::from(vec![video.path.clone()])),
@@ -91,37 +104,51 @@ pub async fn create_video(connection: &Connection, video: Video) -> Result<Video
             ])),
         ],
     )
-    .unwrap();
+    .map_err(|e| e.to_string())?;
 
-    let batches = RecordBatchIterator::new(vec![Ok(record_batch)], table.schema().await.unwrap());
-    table.add(batches).execute().await.unwrap();
+    let batches = RecordBatchIterator::new(vec![Ok(record_batch)], schema);
+    table
+        .add(batches)
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
 
     return Ok(video);
 }
 
-pub async fn create_frames(connection: &Connection, frame: Frame) {
-    let frames_table = connection.open_table("frames").execute().await.unwrap();
+pub async fn create_frames(connection: &Connection, frame: Frame) -> Result<(), String> {
+    let frames_table = connection
+        .open_table("frames")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
 
-    let embeddings = vec![frame.vector.unwrap()];
+    let embeddings = vec![frame.vector.ok_or("Frame is missing its embedding vector")?];
     let vector_array = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
         embeddings
             .into_iter()
             .map(|vec| Some(vec.into_iter().map(Some).collect::<Vec<_>>())),
         512,
     );
+    let schema = frames_table.schema().await.map_err(|e| e.to_string())?;
     let record_batch = RecordBatch::try_new(
-        frames_table.schema().await.unwrap(),
+        schema.clone(),
         vec![
             Arc::new(StringArray::from(vec![frame.video_id])),
             Arc::new(Float64Array::from(vec![frame.timestamp])),
             Arc::new(vector_array),
         ],
     )
-    .unwrap();
+    .map_err(|e| e.to_string())?;
 
-    let batches =
-        RecordBatchIterator::new(vec![Ok(record_batch)], frames_table.schema().await.unwrap());
-    frames_table.add(batches).execute().await.unwrap();
+    let batches = RecordBatchIterator::new(vec![Ok(record_batch)], schema);
+    frames_table
+        .add(batches)
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 pub async fn update_video_status(
@@ -129,7 +156,11 @@ pub async fn update_video_status(
     video_id: String,
     status: String,
 ) -> Result<(), String> {
-    let videos_table = connection.open_table("videos").execute().await.unwrap();
+    let videos_table = connection
+        .open_table("videos")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
 
     videos_table
         .update()
@@ -137,7 +168,7 @@ pub async fn update_video_status(
         .column("status", format!("'{}'", status))
         .execute()
         .await
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -146,11 +177,15 @@ pub async fn search_frames(
     connection: &Connection,
     query_embeddings: &Vec<f32>,
 ) -> Result<Vec<(Frame, Video)>, String> {
-    let frames_table = connection.open_table("frames").execute().await.unwrap();
+    let frames_table = connection
+        .open_table("frames")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
     let frames_batches = frames_table
         .query()
         .nearest_to(query_embeddings.clone())
-        .unwrap()
+        .map_err(|e| e.to_string())?
         .distance_type(lancedb::DistanceType::Cosine)
         .distance_range(None, Some(0.75))
         .select(lancedb::query::Select::Columns(vec![
@@ -161,10 +196,10 @@ pub async fn search_frames(
         .limit(100)
         .execute()
         .await
-        .unwrap()
+        .map_err(|e| e.to_string())?
         .try_collect::<Vec<_>>()
         .await
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     if frames_batches.is_empty() {
         return Ok(vec![]);
@@ -223,16 +258,20 @@ pub async fn search_frames(
         .flatten()
         .collect::<Vec<Frame>>();
 
-    let videos_table = connection.open_table("videos").execute().await.unwrap();
+    let videos_table = connection
+        .open_table("videos")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
     let videos_batches = videos_table
         .query()
         .only_if(format!("id IN ({})", video_ids.join(",")))
         .execute()
         .await
-        .unwrap()
+        .map_err(|e| e.to_string())?
         .try_collect::<Vec<_>>()
         .await
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     let videos = videos_batches
         .iter()
@@ -333,11 +372,15 @@ fn convert_record_batch_to_videos(batch: &RecordBatch) -> Vec<Video> {
 }
 
 pub async fn delete_video(connection: &Connection, video_id: String) -> Result<(), String> {
-    let videos_table = connection.open_table("videos").execute().await.unwrap();
+    let videos_table = connection
+        .open_table("videos")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
     videos_table
         .delete(format!("id = '{}'", video_id).as_str())
         .await
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     delete_frames_by_video_id(connection, video_id).await
 }
@@ -346,11 +389,15 @@ pub async fn delete_frames_by_video_id(
     connection: &Connection,
     video_id: String,
 ) -> Result<(), String> {
-    let frames_table = connection.open_table("frames").execute().await.unwrap();
+    let frames_table = connection
+        .open_table("frames")
+        .execute()
+        .await
+        .map_err(|e| e.to_string())?;
     frames_table
         .delete(format!("video_id = '{}'", video_id).as_str())
         .await
-        .unwrap();
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }

@@ -6,18 +6,51 @@ import { deleteVideo, indexVideo, reIndexVideo } from "../services/api";
 import IndexStatus from "#components/index-status";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, Trash2, FileVideo, Inbox } from "lucide-react";
+import { Plus, RefreshCw, Trash2, FileVideo, Inbox, FolderOpen } from "lucide-react";
 import { Spinner } from "#components/ui/spinner";
 import { open } from '@tauri-apps/plugin-dialog';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { listen } from '@tauri-apps/api/event';
+
+type IndexProgress = { processed: number; total: number };
 
 export function Media() {
   const { isPending, isError, data, error } = useQuery({
     queryKey: ['videos'],
     queryFn: getVideos,
+    // Poll while anything is still indexing so the table updates live.
+    refetchInterval: (query) => {
+      const vids = query.state.data?.results ?? [];
+      return vids.some((v) => v.status === Status.PROCESSING || v.status === Status.PENDING)
+        ? 2000
+        : false;
+    },
   });
 
   const queryClient = useQueryClient()
   const [isDragging, setIsDragging] = useState(false);
+  const [progress, setProgress] = useState<Record<string, IndexProgress>>({});
+
+  // Live per-frame indexing progress streamed from the Rust indexer.
+  useEffect(() => {
+    const unlisten = listen<{ video_id: string; processed: number; total: number }>(
+      'index-progress',
+      (e) => {
+        const { video_id, processed, total } = e.payload;
+        setProgress((prev) => ({ ...prev, [video_id]: { processed, total } }));
+        // index_video only returns once fully done, so the row would otherwise
+        // stay invisible until completion. The first frame's event surfaces it
+        // as "processing" (and bootstraps refetchInterval polling) — after which
+        // the bar animates live off these events.
+        const cached = queryClient.getQueryData<{ results: Video[] }>(['videos']);
+        const v = cached?.results.find((x) => x.id === video_id);
+        if (!v || v.status !== Status.PROCESSING) {
+          queryClient.invalidateQueries({ queryKey: ['videos'] });
+        }
+      },
+    );
+    return () => { unlisten.then((fn) => fn()); };
+  }, [queryClient]);
 
   const pickFiles = async () => {
     const files = await open({
@@ -131,7 +164,7 @@ export function Media() {
         ) : videos.length === 0 ? (
           <EmptyState onAdd={pickFiles} />
         ) : (
-          <MediaTable videos={videos} />
+          <MediaTable videos={videos} progress={progress} />
         )}
       </div>
 
@@ -184,7 +217,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-function MediaTable({ videos }: { videos: Video[] }) {
+function MediaTable({ videos, progress }: { videos: Video[]; progress: Record<string, IndexProgress> }) {
   return (
     <div className="px-8 py-5">
       <div className="overflow-hidden rounded-sm border border-white/6">
@@ -201,7 +234,7 @@ function MediaTable({ videos }: { videos: Video[] }) {
           </thead>
           <tbody>
             {videos.map((video, idx) => (
-              <MediaRow key={video.id} video={video} idx={idx + 1} />
+              <MediaRow key={video.id} video={video} idx={idx + 1} progress={progress[video.id]} />
             ))}
           </tbody>
         </table>
@@ -210,7 +243,7 @@ function MediaTable({ videos }: { videos: Video[] }) {
   );
 }
 
-function MediaRow({ video, idx }: { video: Video; idx: number }) {
+function MediaRow({ video, idx, progress }: { video: Video; idx: number; progress?: IndexProgress }) {
   const [deleting, setDeleting] = useState(false);
   const [reIndexing, setReIndexing] = useState(false);
   const queryClient = useQueryClient()
@@ -239,9 +272,16 @@ function MediaRow({ video, idx }: { video: Video; idx: number }) {
     });
   }
 
+  const reveal = () => {
+    revealItemInDir(video.path).catch((err) => {
+      toast.error(`Failed to reveal file: ${err.message ?? err}`);
+    });
+  };
+
   const fileName = video.path.split('/').slice(-1)[0];
   const directory = video.path.split('/').slice(0, -1).join('/');
-  const indexed = new Date(video.last_indexed_at);
+  const indexedDate = video.last_indexed_at ? new Date(video.last_indexed_at) : null;
+  const indexedValid = indexedDate && !isNaN(indexedDate.getTime());
 
   return (
     <tr className="group/row border-t border-white/5 transition-colors hover:bg-white/[0.025]">
@@ -259,11 +299,25 @@ function MediaRow({ video, idx }: { video: Video; idx: number }) {
         {directory}
       </td>
       <td className="px-3 py-3 font-mono text-[11px] text-muted-foreground whitespace-nowrap tabular-nums">
-        {indexed.toLocaleDateString()} · {indexed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        {indexedValid
+          ? `${indexedDate!.toLocaleDateString()} · ${indexedDate!.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+          : "—"}
       </td>
-      <td className="px-3 py-3"><IndexStatus status={video.status} /></td>
+      <td className="px-3 py-3">
+        <IndexStatus status={video.status} />
+        {video.status === Status.PROCESSING && progress && (
+          <ProgressBar processed={progress.processed} total={progress.total} />
+        )}
+      </td>
       <td className="px-3 py-3">
         <div className="flex justify-end gap-1.5">
+          <button
+            onClick={reveal}
+            title="Reveal in Finder"
+            className="grid size-7 place-items-center rounded-sm border border-white/8 text-muted-foreground transition-colors hover:border-amber-400/60 hover:bg-amber-400/[0.06] hover:text-amber-200"
+          >
+            <FolderOpen className="size-3.5" />
+          </button>
           <button
             onClick={reIndex}
             title="Re-index"
@@ -282,6 +336,23 @@ function MediaRow({ video, idx }: { video: Video; idx: number }) {
         </div>
       </td>
     </tr>
+  );
+}
+
+function ProgressBar({ processed, total }: { processed: number; total: number }) {
+  const pct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : null;
+  return (
+    <div className="mt-1.5 w-28">
+      <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
+        <div
+          className={`h-full bg-amber-400 transition-all duration-300 ${pct === null ? "animate-pulse w-1/3" : ""}`}
+          style={pct !== null ? { width: `${pct}%` } : undefined}
+        />
+      </div>
+      <div className="mt-1 font-mono text-[9px] tracking-wider text-muted-foreground tabular-nums">
+        {pct !== null ? `${processed}/${total} · ${pct}%` : `${processed} frames`}
+      </div>
+    </div>
   );
 }
 

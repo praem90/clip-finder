@@ -3,7 +3,7 @@ use crate::database::models::{Frame, Video};
 use crate::database::operations;
 use crate::engine;
 use chrono::Utc;
-use tauri::State;
+use tauri::{Emitter, State};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Response {
@@ -75,6 +75,7 @@ pub async fn index_video(
     path: String,
     connection: State<'_, Connection>,
     app_state: State<'_, crate::AppState>,
+    app_handle: tauri::AppHandle,
 ) -> Result<Response, String> {
     let video = Video {
         id: uuid::Uuid::new_v4().to_string(),
@@ -89,12 +90,19 @@ pub async fn index_video(
         created_at: Some(Utc::now()),
         last_indexed_at: Some(Utc::now()),
     };
-    let video = operations::create_video(&connection, video).await.unwrap();
+    let video = operations::create_video(&connection, video).await?;
     let engine_lock = app_state.engine.lock().await;
     let engine = engine_lock.as_ref().ok_or("Engine not loaded yet")?;
-    engine::index::index_video(&connection, &engine, &video)
-        .await
-        .unwrap();
+    if let Err(e) = engine::index::index_video(&connection, &engine, &video, move |p| {
+        let _ = app_handle.emit("index-progress", p);
+    })
+    .await
+    {
+        let _ =
+            operations::update_video_status(&connection, video.id.clone(), "failed".to_string())
+                .await;
+        return Err(e);
+    }
 
     let res = Response {
         success: true,
@@ -110,8 +118,14 @@ pub async fn get_frame_image(
     video_path: String,
     timestamp: f64,
 ) -> Result<tauri::ipc::Response, String> {
+    // Only ever read frames from a real, existing file on disk.
+    if !std::path::Path::new(&video_path).is_file() {
+        return Err("Video file not found".to_string());
+    }
+
     let temp_dir = std::env::temp_dir();
-    // TODO: sanitize video name to prevent path traversal
+    // The output file is always written inside temp_dir using only the basename,
+    // so a crafted video_path cannot escape the temp directory.
     let frame_filename = format!(
         "{}_{}.jpg",
         video_path.split('/').last().unwrap_or("unknown_video"),
@@ -119,18 +133,17 @@ pub async fn get_frame_image(
     );
     let frame_path = temp_dir.join(frame_filename);
     if !frame_path.exists() {
-        engine::index::extract_single_frame(
-            video_path.as_str(),
-            timestamp,
-            frame_path.to_str().unwrap(),
-        )
-        .await
-        .map_err(|e| format!("Failed to extract frame: {}", e))
-        .unwrap();
+        let output = frame_path
+            .to_str()
+            .ok_or("Invalid temporary frame path")?;
+        engine::index::extract_single_frame(video_path.as_str(), timestamp, output)
+            .await
+            .map_err(|e| format!("Failed to extract frame: {}", e))?;
     }
 
-    let data = std::fs::read(frame_path).map_err(|e| format!("Failed to read frame image: {}", e));
-    Ok(tauri::ipc::Response::new(data.unwrap()))
+    let data =
+        std::fs::read(&frame_path).map_err(|e| format!("Failed to read frame image: {}", e))?;
+    Ok(tauri::ipc::Response::new(data))
 }
 
 #[tauri::command]
@@ -138,9 +151,8 @@ pub async fn delete_video(
     video_id: String,
     connection: State<'_, Connection>,
 ) -> Result<(), String> {
-    operations::delete_video(&connection, video_id)
-        .await
-        .unwrap();
+    validate_video_id(&video_id)?;
+    operations::delete_video(&connection, video_id).await?;
 
     return Ok(());
 }
@@ -150,22 +162,56 @@ pub async fn reindex_video(
     video_id: String,
     connection: State<'_, Connection>,
     app_state: State<'_, crate::AppState>,
+    app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    operations::delete_frames_by_video_id(&connection, video_id.clone())
-        .await
-        .unwrap();
-    let video = operations::get_video_by_id(&connection, video_id.clone())
-        .await
-        .unwrap();
+    validate_video_id(&video_id)?;
+    operations::delete_frames_by_video_id(&connection, video_id.clone()).await?;
+    let video = operations::get_video_by_id(&connection, video_id.clone()).await?;
     if let Some(video) = video {
         let engine_lock = app_state.engine.lock().await;
         let engine = engine_lock.as_ref().ok_or("Engine not loaded yet")?;
-        engine::index::index_video(&connection, &engine, &video)
-            .await
-            .unwrap();
+        if let Err(e) = engine::index::index_video(&connection, &engine, &video, move |p| {
+            let _ = app_handle.emit("index-progress", p);
+        })
+        .await
+        {
+            let _ = operations::update_video_status(
+                &connection,
+                video.id.clone(),
+                "failed".to_string(),
+            )
+            .await;
+            return Err(e);
+        }
     } else {
         return Err("Video not found".to_string());
     }
 
     return Ok(());
+}
+
+/// Export a clip spanning `before_secs` before and `after_secs` after `timestamp`
+/// (clamped at the start of the file) to `output_path`.
+#[tauri::command]
+pub async fn export_clip(
+    video_path: String,
+    timestamp: f64,
+    before_secs: f64,
+    after_secs: f64,
+    output_path: String,
+) -> Result<(), String> {
+    if !std::path::Path::new(&video_path).is_file() {
+        return Err("Video file not found".to_string());
+    }
+    let start = (timestamp - before_secs).max(0.0);
+    let duration = (timestamp + after_secs) - start;
+    engine::index::export_clip(&video_path, start, duration, &output_path).await
+}
+
+/// Guard against SQL-literal injection: every id we store is a v4 UUID, so reject
+/// anything that isn't one before it reaches an `only_if` / `delete` clause.
+fn validate_video_id(video_id: &str) -> Result<(), String> {
+    uuid::Uuid::parse_str(video_id)
+        .map(|_| ())
+        .map_err(|_| "Invalid video id".to_string())
 }

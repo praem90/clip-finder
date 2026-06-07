@@ -11,9 +11,11 @@ import {
 } from "#components/ui/sidebar"
 import { Library, Search } from "lucide-react"
 import { useNavigation, Page } from "@/contexts/NavigationContext";
+import { useEngine } from "@/contexts/EngineContext";
 
 export function AppSidebar() {
 	const { activePage, setActivePage } = useNavigation();
+	const { engineReady } = useEngine();
 	return (
 		<Sidebar collapsible="icon" className="hairline-r">
 			<SidebarHeader className="px-3 pt-5 pb-4">
@@ -55,8 +57,8 @@ export function AppSidebar() {
 				<div className="hairline-t -mx-3 mb-3" />
 				<div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:flex-col">
 					<div className="flex items-center gap-1.5 group-data-[collapsible=icon]:hidden">
-						<span className="size-1.5 rounded-full bg-amber-400 amber-dot" />
-						<span className="mono-label">engine · ready</span>
+						<span className={`size-1.5 rounded-full ${engineReady ? "bg-emerald-400" : "bg-amber-400 amber-dot"}`} />
+						<span className="mono-label">engine · {engineReady ? "ready" : "initializing"}</span>
 					</div>
 					<SidebarTrigger className="size-7 rounded-sm border border-white/5 bg-transparent text-muted-foreground hover:bg-white/[0.04] hover:text-foreground" />
 				</div>
